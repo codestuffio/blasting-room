@@ -1,0 +1,24 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# Qloo response data must never be committed (hackathon data terms)
+qloo-cache/
+fixtures/qloo/
+*.qloo.json
+
+# go
+/server/bin/
+/bin/
+
+# web
+node_modules/
+/web/build/
+/web/.svelte-kit/
+/web/.vite/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
