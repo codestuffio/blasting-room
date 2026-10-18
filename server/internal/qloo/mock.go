@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -103,16 +104,7 @@ func mockInsights(q url.Values) map[string]any {
 	seed := q.Encode()
 	switch t := q.Get("filter.type"); t {
 	case TypeHeatmap:
-		h := hash(seed)
-		pts := []map[string]any{}
-		for i := 0; i < 12; i++ {
-			k := (h + uint32(i)*104729) % 1000
-			pts = append(pts, map[string]any{
-				"location": map[string]any{"latitude": 41.92 + float64(k%40)/1000, "longitude": -87.70 + float64(k%55)/1000, "geohash": fmt.Sprintf("dp3wm%02d", i)},
-				"query":    map[string]any{"affinity": float64(k%100) / 100, "affinity_rank": float64(i + 1), "popularity": float64(k%80) / 100},
-			})
-		}
-		return map[string]any{"heatmap": pts}
+		return map[string]any{"heatmap": mockHeatmap(q.Get("filter.location.query"), q.Get("signal.interests.entities"))}
 	case TypeDemographics:
 		return map[string]any{"demographics": []map[string]any{{
 			"entity_id": q.Get("signal.interests.entities"),
@@ -124,7 +116,69 @@ func mockInsights(q url.Values) map[string]any {
 	case TypeTag:
 		return map[string]any{"tags": mockTags(seed)}
 	default:
-		return map[string]any{"entities": mockEntities(t, seed, atoi(q.Get("take"), 10))}
+		ents := mockEntities(t, seed, atoi(q.Get("take"), 10))
+		if t == TypePlace {
+			placeAround(ents, q.Get("filter.location"))
+		}
+		return map[string]any{"entities": ents}
+	}
+}
+
+// mockCities centres the synthetic heatmap on the demo venues' cities.
+var mockCities = map[string][2]float64{
+	"chicago": {41.895, -87.68},
+	"austin":  {30.267, -97.743},
+	"seattle": {47.63, -122.35},
+}
+
+// mockHeatmap returns a 9x9 grid of cells around the city with one smooth
+// hotspot whose position depends on the artist, so different artists draw
+// visibly different maps.
+func mockHeatmap(city, entity string) []map[string]any {
+	c, ok := mockCities[strings.ToLower(strings.TrimSpace(city))]
+	if !ok {
+		c = mockCities["chicago"]
+	}
+	h := hash(entity)
+	hotLat := c[0] + float64(int(h%121)-60)/1000
+	hotLon := c[1] + float64(int((h/121)%121)-60)/1000
+	pts := []map[string]any{}
+	for i := 0; i < 9; i++ {
+		for j := 0; j < 9; j++ {
+			lat := c[0] + float64(i-4)*0.025
+			lon := c[1] + float64(j-4)*0.025
+			d2 := (math.Pow(lat-hotLat, 2) + math.Pow(lon-hotLon, 2)) / 0.003
+			noise := float64(hash(fmt.Sprint(entity, i, j))%100) / 100
+			aff := math.Round((0.8*math.Exp(-d2)+0.2*noise)*1000) / 1000
+			pts = append(pts, map[string]any{
+				"location": map[string]any{"latitude": lat, "longitude": lon, "geohash": fmt.Sprintf("mock%d%d", i, j)},
+				"query":    map[string]any{"affinity": aff, "popularity": math.Round(noise*800) / 1000},
+			})
+		}
+	}
+	sort.Slice(pts, func(a, b int) bool {
+		return pts[a]["query"].(map[string]any)["affinity"].(float64) > pts[b]["query"].(map[string]any)["affinity"].(float64)
+	})
+	for i, p := range pts {
+		p["query"].(map[string]any)["affinity_rank"] = float64(i + 1)
+	}
+	return pts
+}
+
+// placeAround gives mock places coordinates within about 2 km of the
+// filter.location point ("POINT(lon lat)"), in Qloo's top-level location shape.
+func placeAround(ents []map[string]any, point string) {
+	var lon, lat float64
+	if _, err := fmt.Sscanf(point, "POINT(%f %f)", &lon, &lat); err != nil {
+		return
+	}
+	for i, e := range ents {
+		k := hash(e["entity_id"].(string))
+		e["location"] = map[string]any{
+			"lat": lat + float64(int(k%41)-20)/1000,
+			"lon": lon + float64(int((k/41)%41)-20)/1000,
+		}
+		e["properties"] = map[string]any{"address": fmt.Sprintf("%d Mock Street", 100+i*10)}
 	}
 }
 

@@ -3,6 +3,7 @@ package qloo
 import (
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -93,6 +94,49 @@ func TestMockServesEveryEndpoint(t *testing.T) {
 		}
 		if len(res.Entities)+len(res.Heatmap)+len(res.Tags)+len(res.Demographics) == 0 {
 			t.Fatalf("insights %s: empty", ft)
+		}
+	}
+}
+
+func TestEntityCoordinatesAcceptsKnownShapes(t *testing.T) {
+	for name, e := range map[string]Entity{
+		"location":   {Location: map[string]any{"lat": 41.9, "lon": -87.7}},
+		"geocode":    {Properties: map[string]any{"geocode": map[string]any{"latitude": 41.9, "longitude": -87.7}}},
+		"properties": {Properties: map[string]any{"latitude": 41.9, "longitude": -87.7}},
+	} {
+		if lat, lon, ok := e.Coordinates(); !ok || lat != 41.9 || lon != -87.7 {
+			t.Errorf("%s: got %v %v %v", name, lat, lon, ok)
+		}
+	}
+	if _, _, ok := (Entity{Properties: map[string]any{"address": "1 Main St"}}).Coordinates(); ok {
+		t.Error("entity without coordinates reported ok")
+	}
+}
+
+func TestMockGeoIsLocal(t *testing.T) {
+	c := NewMock()
+	ctx := context.Background()
+	res, err := c.Insights(ctx, url.Values{
+		"filter.type": {TypePlace}, "signal.interests.entities": {"x"},
+		"filter.location": {"POINT(-122.384600 47.668700)"}, "take": {"8"},
+	})
+	if err != nil || len(res.Entities) != 8 {
+		t.Fatalf("places: %v %d", err, len(res.Entities))
+	}
+	for _, e := range res.Entities {
+		lat, lon, ok := e.Coordinates()
+		if !ok || math.Abs(lat-47.6687) > 0.03 || math.Abs(lon+122.3846) > 0.03 {
+			t.Fatalf("%s at %v,%v (ok=%v), want near Ballard", e.Name, lat, lon, ok)
+		}
+	}
+
+	res, err = c.Insights(ctx, url.Values{"filter.type": {TypeHeatmap}, "signal.interests.entities": {"x"}, "filter.location.query": {"Seattle"}})
+	if err != nil || len(res.Heatmap) != 81 {
+		t.Fatalf("heatmap: %v %d", err, len(res.Heatmap))
+	}
+	for _, p := range res.Heatmap {
+		if math.Abs(p.Location.Latitude-47.63) > 0.11 || p.Query.Affinity < 0 || p.Query.Affinity > 1 {
+			t.Fatalf("cell %+v outside Seattle or affinity out of range", p)
 		}
 	}
 }

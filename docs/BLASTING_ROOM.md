@@ -85,7 +85,7 @@ A single page, exportable to PDF:
 
 ## 6. Tech stack
 
-- **Frontend:** Svelte 5 + SvelteKit with `adapter-static`, built as a single-page app. A plain `fetch` stream reads the agent trace (SSE format). MapLibre GL comes later for the map.
+- **Frontend:** Svelte 5 + SvelteKit with `adapter-static`, built as a single-page app. A plain `fetch` stream reads the agent trace (SSE format). MapLibre GL with OpenFreeMap tiles draws the map from `geo` events.
 - **Backend:** Go 1.24, standard library `net/http`.
   - one binary serves `/api/*` and the built Svelte app
   - Qloo REST client with an in-memory TTL cache

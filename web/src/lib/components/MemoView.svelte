@@ -1,7 +1,15 @@
 <script lang="ts">
-	import type { Memo, Venue } from '#lib/types.ts';
+	import type { Geo, Memo, Venue } from '#lib/types.ts';
+	import VenueMap from '#lib/components/VenueMap.svelte';
 
-	let { memo, venue }: { memo: Memo; venue: Venue } = $props();
+	let { memo, venue, geo = [] }: { memo: Memo; venue: Venue; geo?: Geo[] } = $props();
+
+	let names = $derived(
+		Object.fromEntries(
+			[memo.headliner, memo.support, ...memo.alternates].map((p) => [p.entity_id, p.name])
+		)
+	);
+	let partnerNames = $derived(memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name));
 
 	const kindLabel = { place: 'Nearby spot', podcast: 'Podcast', brand: 'Brand' };
 </script>
@@ -24,6 +32,13 @@
 			</div>
 		{/each}
 	</section>
+
+	{#if geo.length}
+		<section>
+			<h3>Where the fans are</h3>
+			<VenueMap {venue} {geo} {names} focus={memo.headliner.entity_id} highlight={partnerNames} />
+		</section>
+	{/if}
 
 	<section class="grid">
 		<div>

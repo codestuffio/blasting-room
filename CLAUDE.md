@@ -44,6 +44,11 @@ make docker
 - **Changing tools or the memo:**
   - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`.
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
+- **Map data never goes to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
+- **Map UI** (`web/src/lib/components/VenueMap.svelte`):
+  - Uses MapLibre GL, pinned to an exact version, with OpenFreeMap tiles (no key; positron for light, dark for dark).
+  - MapLibre 6 loads its worker separately. It is bundled with `?worker&url` and handed to `setWorkerUrl`.
+  - Heat cells, pins and labels are layers, not DOM markers, so labels never collide. Re-add them after every `setStyle`.
 - **Demo venues** use fictional names in real neighborhoods.
 - **Agent tests** use a fake Messages API (`httptest`). Never call the real Anthropic API from tests.
 - **Local Go may be older than 1.24.** `go.mod` pins `toolchain go1.24.9`, which downloads automatically.
