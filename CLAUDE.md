@@ -45,6 +45,11 @@ make docker
   - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`.
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
 - **Map data never goes to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
+- **Look and feel: the "Console" theme** (a mixing desk).
+  - Color and font tokens live in `web/src/app.css`, with a dark default and a "daylight" light variant. Use `--accent` for fills and `--accent-text` for amber text, since amber text fails contrast on the light background.
+  - Shared global classes: `.led` (status light: `.on`, `.ok`, `.bad`, `.live`), `.tape` (channel label) and `.label` (mono section label).
+  - Fonts are Michroma (display), IBM Plex Sans (body) and IBM Plex Mono (data), loaded from Google Fonts in `app.html`.
+  - `Logo.svelte` is the VU-needle mark; `VuMeter.svelte` is the analog confidence meter.
 - **Map UI** (`web/src/lib/components/VenueMap.svelte`):
   - Uses MapLibre GL, pinned to an exact version, with OpenFreeMap tiles (no key; positron for light, dark for dark).
   - MapLibre 6 loads its worker separately. It is bundled with `?worker&url` and handed to `setWorkerUrl`.

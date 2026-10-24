@@ -28,8 +28,8 @@
 	// One-hue sequential ramps (low → high affinity). Each theme has its own steps:
 	// light goes pale → deep, dark goes dim → bright.
 	const ramps = {
-		light: ['#fde3d3', '#f7a476', '#e8692a', '#b9450c', '#7a2a05'],
-		dark: ['#4a2414', '#8a3a14', '#d4500f', '#ff7a3d', '#ffc29e']
+		light: ['#fbe9c4', '#f5c46a', '#e09a1a', '#a86a00', '#6a4200'],
+		dark: ['#3a2a10', '#7a5212', '#c98a12', '#ffb224', '#ffe2a0']
 	};
 
 	// Last heatmap per artist: the focus artist first, then in the order they were fetched.
@@ -64,8 +64,8 @@
 
 	// Per-theme colors for things drawn inside the WebGL canvas, where CSS variables don't reach.
 	const ink = {
-		light: { text: '#1d1916', halo: '#ffffff', partner: '#256abf' },
-		dark: { text: '#f3ede6', halo: '#0f0d0c', partner: '#5598e7' }
+		light: { text: '#1a1206', halo: '#f8f4ea', partner: '#1f7a4a' },
+		dark: { text: '#efe6d2', halo: '#141311', partner: '#66e08f' }
 	};
 
 	let container: HTMLDivElement;
@@ -296,7 +296,7 @@
 		position: relative;
 		height: clamp(260px, 45vw, 380px);
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: 12px;
 		overflow: hidden;
 		background: var(--panel);
 	}
@@ -311,10 +311,10 @@
 		gap: 0.4rem;
 	}
 	.picker button {
-		font: inherit;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
-		padding: 0.2rem 0.7rem;
-		border-radius: 999px;
+		padding: 0.25rem 0.7rem;
+		border-radius: 6px;
 		border: 1px solid var(--line);
 		background: transparent;
 		color: var(--text);
@@ -364,12 +364,7 @@
 		background: var(--partner);
 	}
 	.venue-map {
-		--partner: #5598e7;
-	}
-	@media (prefers-color-scheme: light) {
-		.venue-map {
-			--partner: #256abf;
-		}
+		--partner: var(--ok);
 	}
 	.venue-map :global(.map-tip .maplibregl-popup-content) {
 		background: var(--panel);
