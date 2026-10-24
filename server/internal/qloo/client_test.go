@@ -2,6 +2,7 @@ package qloo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
@@ -138,5 +139,20 @@ func TestMockGeoIsLocal(t *testing.T) {
 		if math.Abs(p.Location.Latitude-47.63) > 0.11 || p.Query.Affinity < 0 || p.Query.Affinity > 1 {
 			t.Fatalf("cell %+v outside Seattle or affinity out of range", p)
 		}
+	}
+}
+
+func TestRawReturnsWholeBody(t *testing.T) {
+	raw, err := NewMock().Raw(context.Background(), "/v2/tags", url.Values{"filter.query": {"indie"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body struct {
+		Results struct {
+			Tags []Tag `json:"tags"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil || len(body.Results.Tags) == 0 {
+		t.Fatalf("raw = %s, err = %v", raw, err)
 	}
 }
