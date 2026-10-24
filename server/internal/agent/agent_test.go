@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -170,5 +172,68 @@ func TestToolErrorsAreReportedNotFatal(t *testing.T) {
 	block := msgs[len(msgs)-1].(map[string]any)["content"].([]any)[0].(map[string]any)
 	if block["is_error"] != true {
 		t.Fatalf("expected is_error tool_result, got %v", block)
+	}
+}
+
+func TestMapToolsEmitGeoButKeepModelResultsCompact(t *testing.T) {
+	fake := &fakeClaude{replies: []string{
+		reply("tool_use",
+			toolUse("h1", "local_heatmap", `{"entity_id":"mock-artist-01"}`),
+			toolUse("p1", "co_promo_partners", `{"entity_ids":["mock-artist-01"],"kind":"place"}`),
+			toolUse("p2", "co_promo_partners", `{"entity_ids":["mock-artist-01"],"kind":"podcast"}`),
+		),
+		reply("tool_use", toolUse("m1", memoToolName, memoInput)),
+	}}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+
+	a := New(anthropic.NewClient(option.WithBaseURL(srv.URL), option.WithAPIKey("test")), qloo.NewMock(), Config{})
+	var mu sync.Mutex
+	geos := map[string]*Geo{}
+	_, err := a.Run(context.Background(), Request{VenueID: "harbor"}, func(e Event) {
+		if e.Type == "geo" {
+			mu.Lock()
+			g := e.Data.(*Geo)
+			geos[g.ToolCallID] = g
+			mu.Unlock()
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Podcasts have no coordinates, so only the heatmap and the place call draw on the map.
+	if len(geos) != 2 || geos["h1"] == nil || geos["p1"] == nil {
+		t.Fatalf("geo events = %v", geos)
+	}
+	venue, _ := FindVenue("harbor")
+	heat, places := geos["h1"], geos["p1"]
+	if heat.Kind != "heatmap" || heat.EntityIDs[0] != "mock-artist-01" || len(heat.Cells) != 81 || heat.Venue.Lat != venue.Lat {
+		t.Fatalf("heatmap geo = %+v", heat)
+	}
+	if places.Kind != "partners" || len(places.Places) == 0 || places.Venue.Name != venue.Name {
+		t.Fatalf("partners geo = %+v", places)
+	}
+	for _, p := range places.Places {
+		if p.Name == "" || math.Abs(p.Lat-venue.Lat) > 0.03 || math.Abs(p.Lon-venue.Lon) > 0.03 {
+			t.Fatalf("place %+v not near the venue", p)
+		}
+	}
+
+	// The model sees the compact summary, not every cell or coordinate.
+	msgs := fake.requests[1]["messages"].([]any)
+	blocks := msgs[len(msgs)-1].(map[string]any)["content"].([]any)
+	for i, id := range []string{"h1", "p1", "p2"} {
+		b := blocks[i].(map[string]any)
+		content := b["content"].([]any)[0].(map[string]any)["text"].(string)
+		if b["tool_use_id"] != id || b["is_error"] == true {
+			t.Fatalf("block %d = %v", i, b)
+		}
+		if strings.Contains(content, "tool_call_id") || strings.Contains(content, `"lon"`) && id != "h1" {
+			t.Fatalf("%s result leaked map data: %s", id, content)
+		}
+	}
+	heatResult := blocks[0].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	if !strings.Contains(heatResult, "venue_percentile") || strings.Count(heatResult, `"lat"`) > 5 {
+		t.Fatalf("heatmap result is not the compact summary: %s", heatResult)
 	}
 }

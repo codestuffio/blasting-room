@@ -160,7 +160,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return summarizeHeatmap(res.Heatmap, v.Lat, v.Lon), nil
+				return withGeo{summarizeHeatmap(res.Heatmap, v.Lat, v.Lon), heatGeo(v, in.EntityID, res.Heatmap)}, nil
 			},
 		},
 		{
@@ -259,7 +259,10 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return compactEntities(res.Entities), nil
+				if in.Kind != "place" {
+					return compactEntities(res.Entities), nil
+				}
+				return withGeo{compactEntities(res.Entities), placesGeo(v, in.EntityIDs, res.Entities)}, nil
 			},
 		},
 		{

@@ -25,6 +25,7 @@ type Entity struct {
 	Popularity     float64        `json:"popularity,omitempty"`
 	Disambiguation string         `json:"disambiguation,omitempty"`
 	Tags           []Tag          `json:"tags,omitempty"`
+	Location       map[string]any `json:"location,omitempty"`
 	Properties     map[string]any `json:"properties,omitempty"`
 	Query          map[string]any `json:"query,omitempty"`
 }
@@ -33,6 +34,34 @@ type Entity struct {
 func (e Entity) Affinity() (float64, bool) {
 	v, ok := e.Query["affinity"].(float64)
 	return v, ok
+}
+
+// Coordinates returns a place's latitude and longitude. Qloo's place
+// coordinates are not yet verified against a live key, so this accepts the
+// shapes seen in its docs: a top-level location {lat, lon} and
+// properties.geocode or properties carrying latitude/longitude.
+func (e Entity) Coordinates() (lat, lon float64, ok bool) {
+	var geocode map[string]any
+	if g, isMap := e.Properties["geocode"].(map[string]any); isMap {
+		geocode = g
+	}
+	for _, m := range []map[string]any{e.Location, geocode, e.Properties} {
+		if lat, lon, ok := latLon(m); ok {
+			return lat, lon, true
+		}
+	}
+	return 0, 0, false
+}
+
+func latLon(m map[string]any) (float64, float64, bool) {
+	for _, k := range [][2]string{{"lat", "lon"}, {"latitude", "longitude"}, {"lat", "lng"}} {
+		lat, okLat := m[k[0]].(float64)
+		lon, okLon := m[k[1]].(float64)
+		if okLat && okLon && (lat != 0 || lon != 0) {
+			return lat, lon, true
+		}
+	}
+	return 0, 0, false
 }
 
 // Tag appears both on entities ("id") and in /v2/tags results ("tag_id").

@@ -62,11 +62,43 @@ export interface ToolResult {
 	bytes: number;
 }
 
+// Map data from local_heatmap and co_promo_partners (the "geo" event). It is
+// for the UI only; the model sees compact summaries.
+export interface GeoPoint {
+	name: string;
+	lat: number;
+	lon: number;
+}
+
+export interface HeatCell {
+	lat: number;
+	lon: number;
+	affinity: number;
+}
+
+export interface GeoPlace {
+	entity_id: string;
+	name: string;
+	lat: number;
+	lon: number;
+	address?: string;
+}
+
+export interface Geo {
+	tool_call_id: string;
+	kind: 'heatmap' | 'partners';
+	entity_ids: string[];
+	venue: GeoPoint;
+	cells?: HeatCell[];
+	places?: GeoPlace[];
+}
+
 export type AgentEvent =
 	| { type: 'start'; data: { venue: Venue; model: string; qloo_mock: boolean } }
 	| { type: 'progress' | 'text'; data: string }
 	| { type: 'tool_call'; data: ToolCall }
 	| { type: 'tool_result'; data: ToolResult }
+	| { type: 'geo'; data: Geo }
 	| { type: 'memo'; data: Memo }
 	| { type: 'error'; data: { message: string } }
 	| { type: 'done'; data?: { turns: number } };

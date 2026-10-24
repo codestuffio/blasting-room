@@ -14,6 +14,8 @@ export default defineConfig({
 			adapter: adapter({ fallback: '200.html' })
 		})
 	],
+	// MapLibre's worker is an ES module that imports a shared chunk.
+	worker: { format: 'es' },
 	server: {
 		// The Go API runs on :8080 during development.
 		proxy: { '/api': 'http://localhost:8080' }

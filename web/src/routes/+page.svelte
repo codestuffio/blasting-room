@@ -4,6 +4,7 @@
 	import type { AgentEvent, Health, Memo, Mode, Venue } from '#lib/types.ts';
 	import Trace from '#lib/components/Trace.svelte';
 	import MemoView from '#lib/components/MemoView.svelte';
+	import VenueMap from '#lib/components/VenueMap.svelte';
 
 	let health = $state<Health | null>(null);
 	let venues = $state<Venue[]>([]);
@@ -20,6 +21,7 @@
 	let controller: AbortController | null = null;
 
 	let venue = $derived(venues.find((v) => v.id === venueId));
+	let geo = $derived(events.flatMap((e) => (e.type === 'geo' ? [e.data] : [])));
 	let canRun = $derived(
 		!!health?.agent_ready && !!venue && !running && (mode === 'fill_date' || offerArtist.trim() !== '')
 	);
@@ -136,8 +138,11 @@
 			</section>
 			<section class="memo-col">
 				{#if memo && venue}
-					<MemoView {memo} {venue} />
+					<MemoView {memo} {venue} {geo} />
 				{:else}
+					{#if venue && geo.length}
+						<VenueMap {venue} {geo} />
+					{/if}
 					<div class="placeholder">The booking memo appears here when the agent finishes.</div>
 				{/if}
 			</section>
@@ -324,6 +329,10 @@
 		letter-spacing: 0.06em;
 		color: var(--muted);
 		margin: 0 0 0.6rem;
+	}
+	.memo-col {
+		display: grid;
+		gap: 1rem;
 	}
 	.placeholder {
 		padding: 3rem 1rem;
