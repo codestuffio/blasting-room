@@ -23,8 +23,9 @@
 	--font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
-/* Daylight console: the same desk with the lights up. Amber stays as a fill; text uses a darker amber. */
-@media (prefers-color-scheme: light) {
+/* Daylight console: the same desk with the lights up. Amber stays as a fill; text uses a darker amber.
+   Print always uses it. */
+@media print, (prefers-color-scheme: light) {
 	:root {
 		color-scheme: light;
 		--bg: #eee8dc;
@@ -40,6 +41,21 @@
 		--bad: #c42839;
 		--led-off: #cfc5b3;
 	}
+}
+
+@media print {
+	:root {
+		--bg: #ffffff;
+	}
+	/* Labels and lights are backgrounds, which print drops by default. */
+	.tape,
+	.led {
+		print-color-adjust: exact;
+	}
+}
+
+@page {
+	margin: 14mm 12mm;
 }
 
 * {
