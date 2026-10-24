@@ -1,4 +1,4 @@
-.PHONY: dev-server dev-web build test check docker
+.PHONY: dev-server dev-web build test check docker probe
 
 # Run the Go API on :8080 (reads ../.env if present).
 dev-server:
@@ -17,6 +17,12 @@ test:
 
 check: test
 	cd web && npm run check
+
+# Run the Day-1 data probes against live Qloo (reads ../.env). Prints to the
+# terminal only; never save the output in the repo (Qloo data can't be committed).
+# Pass flags with ARGS, e.g. make probe ARGS="-only 1,6 -artist Wednesday".
+probe:
+	cd server && set -a && ([ -f ../.env ] && . ../.env || true) && set +a && go run ./cmd/probe $(ARGS)
 
 docker:
 	docker build -t blasting-room .

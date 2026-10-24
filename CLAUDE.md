@@ -25,6 +25,7 @@ make check       # make test + svelte-check
 make build       # web build + Go binary
 make dev-server  # Go API on :8080 (loads ../.env)
 make dev-web     # Vite on :5173, proxies /api to :8080
+make probe       # Day-1 data probes against live Qloo (needs QLOO_API_KEY; stdout only)
 make docker
 ```
 

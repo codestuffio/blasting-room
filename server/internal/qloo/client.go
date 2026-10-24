@@ -103,6 +103,16 @@ func (c *Client) get(ctx context.Context, path string, q url.Values, out any) er
 	return nil
 }
 
+// Raw calls any GET path and returns the whole response body undecoded. The
+// probe command uses it to inspect response shapes the typed methods assume.
+func (c *Client) Raw(ctx context.Context, path string, q url.Values) (json.RawMessage, error) {
+	var out json.RawMessage
+	if err := c.get(ctx, path, q, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Search resolves a free-text name to entities (GET /search).
 func (c *Client) Search(ctx context.Context, query string, types []string, take int) ([]Entity, error) {
 	q := url.Values{"query": {query}}
