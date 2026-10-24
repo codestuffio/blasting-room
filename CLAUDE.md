@@ -49,6 +49,8 @@ make docker
   - Uses MapLibre GL, pinned to an exact version, with OpenFreeMap tiles (no key; positron for light, dark for dark).
   - MapLibre 6 loads its worker separately. It is bundled with `?worker&url` and handed to `setWorkerUrl`.
   - Heat cells, pins and labels are layers, not DOM markers, so labels never collide. Re-add them after every `setStyle`.
+- **PDF export** is `window.print()` with `@media print` styles (no PDF library). Print shows only the memo, in the light palette.
+  - WebGL can print blank, so print shows a PNG snapshot of the map. `VenueMap.prepareForPrint()` re-renders the map light at 2× before the snapshot and reverts on `afterprint`. A plain Cmd+P snapshots the map as it is on `beforeprint`, which relies on `preserveDrawingBuffer`.
 - **Demo venues** use fictional names in real neighborhoods.
 - **Agent tests** use a fake Messages API (`httptest`). Never call the real Anthropic API from tests.
 - **Local Go may be older than 1.24.** `go.mod` pins `toolchain go1.24.9`, which downloads automatically.
