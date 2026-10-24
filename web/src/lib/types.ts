@@ -102,3 +102,6 @@ export type AgentEvent =
 	| { type: 'memo'; data: Memo }
 	| { type: 'error'; data: { message: string } }
 	| { type: 'done'; data?: { turns: number } };
+
+// UI only: an event plus when it arrived, in ms since the run started. The trace shows it as a timecode.
+export type TraceEvent = AgentEvent & { at: number };

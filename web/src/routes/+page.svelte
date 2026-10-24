@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { getHealth, getVenues, runAgent } from '#lib/api.ts';
-	import type { AgentEvent, Health, Memo, Mode, Venue } from '#lib/types.ts';
+	import type { Health, Memo, Mode, TraceEvent, Venue } from '#lib/types.ts';
 	import Trace from '#lib/components/Trace.svelte';
 	import MemoView from '#lib/components/MemoView.svelte';
 	import VenueMap from '#lib/components/VenueMap.svelte';
+	import Logo from '#lib/components/Logo.svelte';
 
 	let health = $state<Health | null>(null);
 	let venues = $state<Venue[]>([]);
@@ -14,7 +15,7 @@
 	let offerArtist = $state('');
 	let notes = $state('');
 
-	let events = $state<AgentEvent[]>([]);
+	let events = $state<TraceEvent[]>([]);
 	let memo = $state<Memo | null>(null);
 	let running = $state(false);
 	let error = $state('');
@@ -43,11 +44,12 @@
 		error = '';
 		running = true;
 		controller = new AbortController();
+		const t0 = performance.now();
 		try {
 			await runAgent(
 				{ venue_id: venueId, mode, date: date || undefined, offer_artist: offerArtist || undefined, notes: notes || undefined },
 				(e) => {
-					events.push(e);
+					events.push({ ...e, at: performance.now() - t0 });
 					if (e.type === 'memo') memo = e.data;
 					if (e.type === 'error') error = e.data.message;
 				},
@@ -69,17 +71,19 @@
 
 <div class="page">
 	<header class="top">
-		<div>
-			<h1>Blasting Room</h1>
+		<div class="brand">
+			<h1><Logo /></h1>
 			<p class="tag">Live Nation has a data team. Your room has Blasting Room.</p>
 		</div>
 		{#if health}
 			<div class="status">
-				<span class="pill" class:warn={health.qloo_mode === 'mock'}>
-					Qloo: {health.qloo_mode === 'mock' ? 'mock data' : 'live'}
+				<span class="lamp">
+					<span class="led" class:ok={health.qloo_mode === 'live'} class:on={health.qloo_mode === 'mock'}></span>
+					Qloo {health.qloo_mode === 'mock' ? 'mock' : 'live'}
 				</span>
-				<span class="pill" class:warn={!health.agent_ready}>
-					Agent: {health.agent_ready ? 'ready' : 'not configured'}
+				<span class="lamp">
+					<span class="led" class:ok={health.agent_ready} class:bad={!health.agent_ready}></span>
+					Agent {health.agent_ready ? 'ready' : 'off'}
 				</span>
 			</div>
 		{/if}
@@ -87,25 +91,32 @@
 
 	{#if health?.qloo_mode === 'mock'}
 		<p class="banner">
+			<span class="led on"></span>
 			Running on synthetic placeholder data. Results show the workflow, not real taste insights.
 		</p>
 	{/if}
 
 	<form class="setup" onsubmit={start}>
 		<fieldset class="venues">
-			<legend>Your room</legend>
-			{#each venues as v (v.id)}
+			<legend class="label">Your room</legend>
+			{#each venues as v, i (v.id)}
 				<label class="venue" class:selected={v.id === venueId}>
 					<input type="radio" name="venue" value={v.id} bind:group={venueId} />
-					<strong>{v.name}</strong>
-					<span>{v.neighborhood}, {v.city} · {v.capacity} cap</span>
-					<small>{v.vibe}</small>
+					<span class="tape">
+						<span class="led" class:on={v.id === venueId}></span>
+						Ch {String(i + 1).padStart(2, '0')} · {v.neighborhood}
+					</span>
+					<span class="body">
+						<strong>{v.name}</strong>
+						<span>{v.city} · {v.capacity} cap</span>
+						<small>{v.vibe}</small>
+					</span>
 				</label>
 			{/each}
 		</fieldset>
 
 		<fieldset class="task">
-			<legend>What do you need?</legend>
+			<legend class="label">What do you need?</legend>
 			<div class="modes" role="radiogroup">
 				<label class:selected={mode === 'fill_date'}>
 					<input type="radio" name="mode" value="fill_date" bind:group={mode} /> Fill an open date
@@ -122,7 +133,10 @@
 				<label class="wide">Notes for the agent <input bind:value={notes} placeholder="e.g. Thursday, want a younger crowd, under $20 tickets" /></label>
 			</div>
 			<div class="actions">
-				<button type="submit" disabled={!canRun}>{running ? 'Working…' : 'Run the booking agent'}</button>
+				<button type="submit" class="run" disabled={!canRun}>
+					<span class="led" class:live={running}></span>
+					{running ? 'Working…' : 'Run the booking agent'}
+				</button>
 				{#if running}<button type="button" class="ghost" onclick={() => controller?.abort()}>Stop</button>{/if}
 			</div>
 		</fieldset>
@@ -133,7 +147,6 @@
 	{#if events.length || running}
 		<main class="results">
 			<section class="trace-col">
-				<h2>Agent trace</h2>
 				<Trace {events} {running} />
 			</section>
 			<section class="memo-col">
@@ -161,7 +174,7 @@
 		margin: 0 auto;
 		padding: 1.5rem 1rem 3rem;
 		display: grid;
-		gap: 1.25rem;
+		gap: 1.5rem;
 	}
 	.top {
 		display: flex;
@@ -169,53 +182,53 @@
 		justify-content: space-between;
 		align-items: end;
 		gap: 1rem;
+		padding-bottom: 1.25rem;
+		border-bottom: 1px solid var(--line);
 	}
 	h1 {
 		margin: 0;
-		font-size: clamp(2rem, 5vw, 3rem);
-		letter-spacing: -0.03em;
+		font-size: inherit;
+		font-weight: 400;
 	}
 	.tag {
-		margin: 0.2rem 0 0;
+		margin: 0.5rem 0 0;
 		color: var(--muted);
 	}
 	.status {
 		display: flex;
-		gap: 0.5rem;
+		gap: 1.25rem;
 		flex-wrap: wrap;
 	}
-	.pill {
-		padding: 0.2rem 0.7rem;
-		border-radius: 999px;
-		border: 1px solid var(--ok);
-		color: var(--ok);
+	.lamp {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-family: var(--font-mono);
 		font-size: 0.8rem;
-	}
-	.pill.warn {
-		border-color: var(--accent);
-		color: var(--accent);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
 	}
 	.banner {
 		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
 		padding: 0.6rem 0.9rem;
-		border-radius: 8px;
-		border: 1px dashed var(--accent);
-		color: var(--accent);
+		border-radius: 10px;
+		border: 1px solid var(--line);
+		background: var(--panel);
 		font-size: 0.9rem;
 	}
 	fieldset {
 		border: 1px solid var(--line);
-		border-radius: 10px;
-		padding: 1rem;
+		border-radius: 14px;
+		padding: 1.1rem;
 		margin: 0;
 		min-width: 0;
+		background: var(--panel);
 	}
 	legend {
 		padding: 0 0.4rem;
-		color: var(--muted);
-		font-size: 0.85rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
 	}
 	.setup {
 		display: grid;
@@ -228,12 +241,29 @@
 	}
 	.venue {
 		display: grid;
-		gap: 0.2rem;
-		padding: 0.8rem 0.9rem;
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: 10px;
+		overflow: hidden;
 		cursor: pointer;
-		background: var(--panel);
+		background: var(--recess);
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+	.venue .tape {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.venue .body {
+		display: grid;
+		gap: 0.2rem;
+		padding: 0.8rem 0.9rem 0.9rem;
+	}
+	.venue strong {
+		font-family: var(--font-display);
+		font-weight: 400;
+		font-size: 0.95rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
 	}
 	.venue input,
 	.modes input {
@@ -245,6 +275,12 @@
 	.venue small {
 		color: var(--muted);
 	}
+	.venue strong {
+		color: var(--text);
+	}
+	.venue .tape {
+		color: var(--on-tape);
+	}
 	.selected {
 		border-color: var(--accent) !important;
 		box-shadow: 0 0 0 1px var(--accent);
@@ -255,16 +291,30 @@
 		outline-offset: 2px;
 	}
 	.modes {
-		display: flex;
-		gap: 0.5rem;
+		display: inline-flex;
 		flex-wrap: wrap;
-		margin-bottom: 0.9rem;
+		gap: 4px;
+		padding: 4px;
+		margin-bottom: 1rem;
+		background: var(--recess);
+		border: 1px solid var(--line);
+		border-radius: 10px;
 	}
 	.modes label {
-		padding: 0.45rem 0.9rem;
-		border: 1px solid var(--line);
-		border-radius: 999px;
+		padding: 0.5rem 0.9rem;
+		border-radius: 7px;
 		cursor: pointer;
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--muted);
+	}
+	.modes label.selected {
+		background: var(--line);
+		color: var(--text);
+		border-color: transparent !important;
+		box-shadow: none;
 	}
 	.fields {
 		display: grid;
@@ -283,35 +333,55 @@
 	input {
 		font: inherit;
 		color: var(--text);
-		background: var(--bg);
+		background: var(--recess);
 		border: 1px solid var(--line);
-		border-radius: 6px;
-		padding: 0.5rem 0.6rem;
+		border-radius: 8px;
+		padding: 0.55rem 0.65rem;
 		min-width: 0;
+	}
+	input:focus-visible {
+		outline: 2px solid var(--accent);
+		outline-offset: 1px;
 	}
 	.actions {
 		display: flex;
 		gap: 0.6rem;
-		margin-top: 1rem;
+		margin-top: 1.1rem;
 	}
 	button {
 		font: inherit;
-		font-weight: 600;
-		padding: 0.6rem 1.2rem;
+		min-height: 44px;
+		padding: 0 1.3rem;
 		border-radius: 8px;
-		border: 1px solid var(--accent);
+		cursor: pointer;
+	}
+	button.run {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.65rem;
+		font-family: var(--font-display);
+		font-size: 0.8rem;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		border: 0;
 		background: var(--accent);
 		color: var(--on-accent);
-		cursor: pointer;
+		box-shadow: inset 0 -3px 0 rgb(0 0 0 / 0.25);
+	}
+	button.run .led {
+		background: var(--on-accent);
+		box-shadow: none;
 	}
 	button:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
 	}
 	button.ghost {
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
 		background: transparent;
 		color: var(--text);
-		border-color: var(--line);
+		border: 1px solid var(--line);
 	}
 	.error {
 		margin: 0;
@@ -323,13 +393,6 @@
 		gap: 1.5rem;
 		align-items: start;
 	}
-	.results h2 {
-		font-size: 0.85rem;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--muted);
-		margin: 0 0 0.6rem;
-	}
 	.memo-col {
 		display: grid;
 		gap: 1rem;
@@ -339,7 +402,8 @@
 		text-align: center;
 		color: var(--muted);
 		border: 1px dashed var(--line);
-		border-radius: 10px;
+		border-radius: 14px;
+		background: var(--recess);
 	}
 	footer {
 		color: var(--muted);

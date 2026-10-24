@@ -2,6 +2,7 @@
 	import { flushSync } from 'svelte';
 	import type { Geo, Memo, Venue } from '#lib/types.ts';
 	import VenueMap from '#lib/components/VenueMap.svelte';
+	import VuMeter from '#lib/components/VuMeter.svelte';
 
 	let { memo, venue, geo = [] }: { memo: Memo; venue: Venue; geo?: Geo[] } = $props();
 
@@ -13,6 +14,8 @@
 	let partnerNames = $derived(memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name));
 
 	const kindLabel = { place: 'Nearby spot', podcast: 'Podcast', brand: 'Brand' };
+	const needle = { low: 0.2, medium: 0.55, high: 0.9 };
+	const tiers = ['budget', 'standard', 'premium'] as const;
 
 	// "Download PDF" is the browser's print dialog with a print stylesheet; the map is
 	// re-rendered for paper first. The title becomes the PDF's suggested file name.
@@ -49,22 +52,26 @@
 <svelte:window onbeforeprint={beforePrint} onafterprint={afterPrint} />
 
 <article class="memo">
-	<header>
-		<p class="eyebrow">Booking memo · {venue.name}, {venue.neighborhood}</p>
-		<h2>{memo.headliner.name} <span class="with">with</span> {memo.support.name}</h2>
-		<p class="summary">{memo.summary}</p>
-		<div class="meta">
-			<span class="badge {memo.confidence}">{memo.confidence} confidence</span>
+	<header class="head">
+		<div>
+			<p class="eyebrow">Booking memo · {venue.name}, {venue.neighborhood}</p>
+			<h2>{memo.headliner.name} <span class="with">with</span> {memo.support.name}</h2>
+			<p class="summary">{memo.summary}</p>
 			<button type="button" class="download" onclick={download} disabled={preparing}>
 				{preparing ? 'Preparing…' : 'Download PDF'}
 			</button>
+		</div>
+		<div class="meter">
+			<VuMeter value={needle[memo.confidence]} label={`${memo.confidence} confidence`} width={168} />
+			<span class="label">Confidence · <strong>{memo.confidence}</strong></span>
 		</div>
 	</header>
 
 	<section class="picks">
 		{#each [{ role: 'Headliner', pick: memo.headliner }, { role: 'Support', pick: memo.support }] as p (p.role)}
 			<div>
-				<h3>{p.role}: {p.pick.name}</h3>
+				<span class="tape">{p.role}</span>
+				<h3 class="pick">{p.pick.name}</h3>
 				<ul>
 					{#each p.pick.rationale as r, i (i)}<li>{r}</li>{/each}
 				</ul>
@@ -92,7 +99,12 @@
 			<h3>Who's coming</h3>
 			<p>{memo.audience.summary}</p>
 			<p class="muted">Age skew: {memo.audience.age_skew}</p>
-			<p class="muted">Suggested ticket tier: <strong>{memo.audience.ticket_tier}</strong></p>
+			<p class="muted">Suggested ticket tier</p>
+			<div class="tiers">
+				{#each tiers as t (t)}
+					<span class:on={t === memo.audience.ticket_tier}><span class="led" class:on={t === memo.audience.ticket_tier}></span>{t}</span>
+				{/each}
+			</div>
 		</div>
 	</section>
 
@@ -155,17 +167,40 @@
 		display: grid;
 		gap: 1.5rem;
 	}
+	.head {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		align-items: start;
+		gap: 1rem 1.5rem;
+	}
+	.head > div:first-child {
+		flex: 1 1 18rem;
+	}
+	.meter {
+		display: grid;
+		justify-items: center;
+		gap: 0.4rem;
+	}
+	.meter strong {
+		color: var(--text);
+		font-weight: 500;
+	}
 	.eyebrow {
 		margin: 0;
-		color: var(--accent);
-		font-size: 0.8rem;
-		letter-spacing: 0.08em;
+		color: var(--accent-text);
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		letter-spacing: 0.12em;
 		text-transform: uppercase;
 	}
 	h2 {
-		margin: 0.3rem 0;
-		font-size: clamp(1.5rem, 3vw, 2.1rem);
-		line-height: 1.15;
+		margin: 0.4rem 0 0.6rem;
+		font-family: var(--font-display);
+		font-weight: 400;
+		font-size: clamp(1.25rem, 2.6vw, 1.75rem);
+		letter-spacing: 0.03em;
+		line-height: 1.25;
 	}
 	.with {
 		color: var(--muted);
@@ -176,8 +211,20 @@
 		font-size: 1.05rem;
 	}
 	h3 {
-		margin: 0 0 0.4rem;
-		font-size: 0.95rem;
+		margin: 0 0 0.5rem;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		font-weight: 400;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	h3.pick {
+		margin: 0.6rem 0 0.4rem;
+		font-family: var(--font-display);
+		font-size: 1rem;
+		letter-spacing: 0.04em;
+		color: var(--text);
 	}
 	p {
 		margin: 0 0 0.4rem;
@@ -190,18 +237,22 @@
 		color: var(--muted);
 		font-size: 0.9rem;
 	}
-	.meta {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.6rem;
+	.tiers {
+		display: inline-flex;
+		gap: 4px;
+		padding: 4px;
+		background: var(--recess);
+		border: 1px solid var(--line);
+		border-radius: 8px;
 	}
 	.download {
-		font: inherit;
-		font-size: 0.85rem;
-		font-weight: 600;
-		padding: 0.35rem 0.9rem;
+		min-height: 44px;
+		margin-top: 0.4rem;
+		padding: 0 1rem;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
 		border-radius: 8px;
 		border: 1px solid var(--line);
 		background: transparent;
@@ -218,21 +269,20 @@
 	.colophon {
 		display: none;
 	}
-	.badge {
-		display: inline-block;
-		padding: 0.15rem 0.6rem;
-		border-radius: 999px;
-		font-size: 0.8rem;
-		border: 1px solid currentColor;
+	.tiers > span {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.6rem;
+		border-radius: 5px;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		color: var(--muted);
 	}
-	.badge.high {
-		color: var(--ok);
-	}
-	.badge.medium {
-		color: var(--accent);
-	}
-	.badge.low {
-		color: var(--bad);
+	.tiers > span.on {
+		background: var(--line);
+		color: var(--text);
 	}
 	.picks,
 	.grid {
@@ -244,7 +294,7 @@
 	.grid > div {
 		padding: 0.9rem 1rem;
 		border: 1px solid var(--line);
-		border-radius: 8px;
+		border-radius: 12px;
 		background: var(--panel);
 	}
 	.partners {
@@ -263,14 +313,21 @@
 		color: var(--muted);
 	}
 	.kind {
-		color: var(--accent);
-		font-size: 0.8rem;
+		color: var(--accent-text);
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
 	details summary {
 		cursor: pointer;
 		color: var(--muted);
+		font-family: var(--font-mono);
+		font-size: 0.85rem;
+	}
+	td code {
+		font-family: var(--font-mono);
+		color: var(--accent-text);
 	}
 	table {
 		width: 100%;
@@ -295,6 +352,9 @@
 		}
 		.download {
 			display: none;
+		}
+		.tiers {
+			print-color-adjust: exact;
 		}
 		section,
 		.picks > div,
