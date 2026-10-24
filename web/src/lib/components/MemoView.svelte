@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { flushSync } from 'svelte';
 	import type { Geo, Memo, Venue } from '#lib/types.ts';
 	import VenueMap from '#lib/components/VenueMap.svelte';
 
@@ -12,14 +13,52 @@
 	let partnerNames = $derived(memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name));
 
 	const kindLabel = { place: 'Nearby spot', podcast: 'Podcast', brand: 'Brand' };
+
+	// "Download PDF" is the browser's print dialog with a print stylesheet; the map is
+	// re-rendered for paper first. The title becomes the PDF's suggested file name.
+	let mapView = $state<VenueMap>();
+	let preparing = $state(false);
+	let evidenceOpen = $state(false);
+	let saved: { title: string; open: boolean } | null = null;
+
+	async function download() {
+		preparing = true;
+		try {
+			await mapView?.prepareForPrint();
+		} finally {
+			preparing = false;
+		}
+		window.print();
+	}
+
+	function beforePrint() {
+		saved = { title: document.title, open: evidenceOpen };
+		document.title = `Booking memo - ${memo.headliner.name} with ${memo.support.name} - ${venue.name}`;
+		evidenceOpen = true;
+		flushSync();
+	}
+
+	function afterPrint() {
+		if (!saved) return;
+		document.title = saved.title;
+		evidenceOpen = saved.open;
+		saved = null;
+	}
 </script>
+
+<svelte:window onbeforeprint={beforePrint} onafterprint={afterPrint} />
 
 <article class="memo">
 	<header>
 		<p class="eyebrow">Booking memo · {venue.name}, {venue.neighborhood}</p>
 		<h2>{memo.headliner.name} <span class="with">with</span> {memo.support.name}</h2>
 		<p class="summary">{memo.summary}</p>
-		<span class="badge {memo.confidence}">{memo.confidence} confidence</span>
+		<div class="meta">
+			<span class="badge {memo.confidence}">{memo.confidence} confidence</span>
+			<button type="button" class="download" onclick={download} disabled={preparing}>
+				{preparing ? 'Preparing…' : 'Download PDF'}
+			</button>
+		</div>
 	</header>
 
 	<section class="picks">
@@ -36,7 +75,7 @@
 	{#if geo.length}
 		<section>
 			<h3>Where the fans are</h3>
-			<VenueMap {venue} {geo} {names} focus={memo.headliner.entity_id} highlight={partnerNames} />
+			<VenueMap bind:this={mapView} {venue} {geo} {names} focus={memo.headliner.entity_id} highlight={partnerNames} />
 		</section>
 	{/if}
 
@@ -92,7 +131,7 @@
 	</section>
 
 	{#if memo.evidence.length}
-		<details>
+		<details bind:open={evidenceOpen}>
 			<summary>Evidence trail ({memo.evidence.length} claims)</summary>
 			<table>
 				<thead><tr><th>Claim</th><th>Source tool</th></tr></thead>
@@ -104,6 +143,11 @@
 			</table>
 		</details>
 	{/if}
+
+	<footer class="colophon">
+		Prepared with Blasting Room for {venue.name}, {venue.neighborhood}. Taste data from Qloo: aggregate signals,
+		no fan personal data.
+	</footer>
 </article>
 
 <style>
@@ -145,6 +189,34 @@
 	.muted {
 		color: var(--muted);
 		font-size: 0.9rem;
+	}
+	.meta {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.6rem;
+	}
+	.download {
+		font: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		padding: 0.35rem 0.9rem;
+		border-radius: 8px;
+		border: 1px solid var(--line);
+		background: transparent;
+		color: var(--text);
+		cursor: pointer;
+	}
+	.download:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	.download:disabled {
+		opacity: 0.6;
+		cursor: progress;
+	}
+	.colophon {
+		display: none;
 	}
 	.badge {
 		display: inline-block;
@@ -212,6 +284,44 @@
 		padding: 0.4rem;
 		border-bottom: 1px solid var(--line);
 		vertical-align: top;
+	}
+	@media print {
+		/* Block flow fragments across pages more predictably than grid. */
+		.memo {
+			display: block;
+		}
+		.memo > * + * {
+			margin-top: 1.25rem;
+		}
+		.download {
+			display: none;
+		}
+		section,
+		.picks > div,
+		.grid > div,
+		.partners li,
+		tr {
+			break-inside: avoid;
+		}
+		h3,
+		summary {
+			break-after: avoid;
+		}
+		details summary {
+			list-style: none;
+			color: var(--text);
+			font-weight: 600;
+		}
+		details summary::-webkit-details-marker {
+			display: none;
+		}
+		.colophon {
+			display: block;
+			padding-top: 0.6rem;
+			border-top: 1px solid var(--line);
+			color: var(--muted);
+			font-size: 0.75rem;
+		}
 	}
 	@media (max-width: 520px) {
 		.partners li {

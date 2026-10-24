@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { flushSync, onMount } from 'svelte';
 	import type { GeoJSONSource, Map as MapLibreMap } from 'maplibre-gl';
 	import type { Geo, GeoPlace, HeatCell, Venue } from '#lib/types.ts';
 
@@ -75,15 +75,18 @@
 	let styleReady = $state(0); // bumps on every style load so effects re-apply layers
 	let failed = $state('');
 
+	function setTheme(t: 'light' | 'dark') {
+		if (t === theme) return;
+		theme = t;
+		if (!map) return;
+		styleReady = 0; // pause the layer effects until the new style has loaded
+		map.setStyle(styles[t], { diff: false });
+	}
+
 	onMount(() => {
 		const mq = window.matchMedia('(prefers-color-scheme: dark)');
 		theme = mq.matches ? 'dark' : 'light';
-		const onTheme = () => {
-			theme = mq.matches ? 'dark' : 'light';
-			if (!map) return;
-			styleReady = 0; // pause the layer effects until the new style has loaded
-			map.setStyle(styles[theme], { diff: false });
-		};
+		const onTheme = () => setTheme(mq.matches ? 'dark' : 'light');
 		mq.addEventListener('change', onTheme);
 
 		let cancelled = false;
@@ -104,6 +107,8 @@
 					center: [venue.lon, venue.lat],
 					zoom: 11.5,
 					cooperativeGestures: true,
+					// Keeps the last frame readable so a print can snapshot it synchronously.
+					canvasContextAttributes: { preserveDrawingBuffer: true },
 					attributionControl: { compact: true }
 				});
 				map.addControl(new ml.NavigationControl({ showCompass: false }), 'top-right');
@@ -231,6 +236,49 @@
 		map.fitBounds(b, { padding: 36, maxZoom: 13.5, duration: 600 });
 	});
 
+	// WebGL canvases often print blank, so print shows a PNG snapshot of the map instead.
+	let snapshot = $state('');
+	let attribution = $state('');
+	let snapshotImg = $state<HTMLImageElement>();
+	let restore: (() => void) | null = null;
+
+	function capture() {
+		if (!map) return;
+		try {
+			snapshot = map.getCanvas().toDataURL('image/png');
+			attribution = container.querySelector('.maplibregl-ctrl-attrib-inner')?.textContent ?? '';
+		} catch (e) {
+			console.warn('map snapshot', e);
+		}
+		flushSync(); // the print layout follows right after, so the <img> must be in the DOM now
+	}
+
+	const rendered = (m: MapLibreMap) =>
+		new Promise<void>((resolve) => {
+			const timer = setTimeout(resolve, 8000); // print what we have if tiles stall
+			m.once('idle', () => {
+				clearTimeout(timer);
+				resolve();
+			});
+			m.triggerRepaint();
+		});
+
+	/** Re-renders the map light and at print resolution, then snapshots it. It reverts after printing. */
+	export async function prepareForPrint() {
+		if (!map || failed) return;
+		const was = { theme, ratio: map.getPixelRatio() };
+		restore = () => {
+			restore = null;
+			map?.setPixelRatio(was.ratio);
+			setTheme(was.theme);
+		};
+		map.setPixelRatio(Math.max(2, was.ratio));
+		setTheme('light');
+		await rendered(map);
+		capture();
+		await snapshotImg?.decode().catch(() => {});
+	}
+
 	// Hover a heat cell for its affinity; hover or tap a pin for its name and address.
 	function addTooltips(m: MapLibreMap, lib: typeof import('maplibre-gl')) {
 		const tip = new lib.Popup({ closeButton: false, closeOnClick: false, offset: 10, className: 'map-tip' });
@@ -251,7 +299,15 @@
 	}
 </script>
 
-<figure class="venue-map">
+<!-- A print from prepareForPrint already has its snapshot; a plain Cmd+P takes one of the map as it is. -->
+<svelte:window
+	onbeforeprint={() => {
+		if (!restore) capture();
+	}}
+	onafterprint={() => restore?.()}
+/>
+
+<figure class="venue-map" class:has-snapshot={!!snapshot} style:--partner={ink[theme].partner}>
 	{#if heatmaps.length > 1}
 		<div class="picker" role="radiogroup" aria-label="Show heatmap for">
 			{#each heatmaps as h (h.id)}
@@ -269,6 +325,9 @@
 	>
 		{#if failed}<p class="failed">{failed}</p>{/if}
 	</div>
+	{#if snapshot}
+		<img class="snapshot" src={snapshot} alt={`Map around ${venue.name}`} bind:this={snapshotImg} />
+	{/if}
 	<figcaption>
 		{#if active}
 			<span class="ramp" style:--ramp={`linear-gradient(90deg, ${ramps[theme].join(', ')})`}>
@@ -283,6 +342,7 @@
 				(affinity {venueRank.affinity.toFixed(2)})
 			</span>
 		{/if}
+		{#if snapshot && attribution}<span class="attribution">Map: {attribution}</span>{/if}
 	</figcaption>
 </figure>
 
@@ -363,12 +423,32 @@
 		height: 9px;
 		background: var(--partner);
 	}
-	.venue-map {
-		--partner: #5598e7;
+	.snapshot,
+	.attribution {
+		display: none;
 	}
-	@media (prefers-color-scheme: light) {
+	@media print {
 		.venue-map {
-			--partner: #256abf;
+			break-inside: avoid;
+		}
+		.picker,
+		.has-snapshot .canvas {
+			display: none;
+		}
+		.snapshot {
+			display: block;
+			width: 100%;
+			height: auto;
+			border: 1px solid var(--line);
+			border-radius: 8px;
+		}
+		.attribution {
+			display: inline;
+			flex-basis: 100%;
+			font-size: 0.7rem;
+		}
+		figcaption {
+			print-color-adjust: exact; /* keep the legend ramp and dots, which are backgrounds */
 		}
 	}
 	.venue-map :global(.map-tip .maplibregl-popup-content) {

@@ -348,6 +348,25 @@
 	footer a {
 		color: inherit;
 	}
+	/* Print the memo alone. */
+	@media print {
+		.top,
+		.banner,
+		.setup,
+		.error,
+		.trace-col,
+		footer {
+			display: none;
+		}
+		.page {
+			display: block;
+			max-width: none;
+			padding: 0;
+		}
+		.results {
+			display: block;
+		}
+	}
 	@media (max-width: 820px) {
 		.results {
 			grid-template-columns: 1fr;
