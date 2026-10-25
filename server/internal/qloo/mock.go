@@ -72,6 +72,9 @@ func (m *mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	case "/v2/insights":
 		body = map[string]any{"results": mockInsights(q, sparse)}
 	case "/v2/trending":
+		if strings.Contains(q.Get("signal.interests.entities"), ",") {
+			return jsonResponse(r, http.StatusBadRequest, map[string]any{"errors": []map[string]any{{"message": "signal.interests.entities.ids must contain only one non-empty string"}}}), nil
+		}
 		trend := []map[string]any{}
 		if id := q.Get("signal.interests.entities"); !(sparse && thin(id)) {
 			trend = mockTrend(id, q.Get("filter.start_date"), q.Get("filter.end_date"))
@@ -349,7 +352,7 @@ func mockTrend(entity, start, end string) []map[string]any {
 	}
 	from, err := time.Parse("2006-01-02", start)
 	if err != nil || !from.Before(to) {
-		from = to.AddDate(0, 0, -90)
+		from = to.AddDate(0, -6, 0)
 	}
 	h := hash(entity)
 	slope := []float64{0.012, 0.001, -0.009}[h%3] // per week: rising, flat, falling

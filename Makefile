@@ -2,7 +2,7 @@
 
 # Run the Go API on :8080 (reads ../.env if present).
 dev-server:
-	cd server && set -a && ([ -f ../.env ] && . ../.env || true) && set +a && STATIC_DIR=../web/build go run ./cmd/blastingroom
+	cd server && set -a && if [ -f ../.env ]; then . ../.env; fi && set +a && STATIC_DIR=../web/build go run ./cmd/blastingroom
 
 # Run the Svelte dev server on :5173, proxying /api to :8080.
 dev-web:
@@ -22,7 +22,7 @@ check: test
 # terminal only; never save the output in the repo (Qloo data can't be committed).
 # Pass flags with ARGS, e.g. make probe ARGS="-only 1,6 -artist Wednesday".
 probe:
-	cd server && set -a && ([ -f ../.env ] && . ../.env || true) && set +a && go run ./cmd/probe $(ARGS)
+	cd server && set -a && if [ -f ../.env ]; then . ../.env; fi && set +a && go run ./cmd/probe $(ARGS)
 
 docker:
 	docker build -t blasting-room .

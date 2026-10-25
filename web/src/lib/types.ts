@@ -9,6 +9,7 @@ export interface Venue {
 	lon: number;
 	capacity: number;
 	vibe: string;
+	seeds: string[];
 }
 
 export interface Health {

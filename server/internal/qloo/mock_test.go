@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -43,7 +44,7 @@ func TestMockSparseThinsCoverage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		raw, _ := c.Trending(ctx, TypeArtist, []string{id}, time.Now().AddDate(0, 0, -90), time.Now())
+		raw, _ := c.Trending(ctx, TypeArtist, id, time.Now().AddDate(0, -6, 0), time.Now())
 		var tr struct{ Trending []json.RawMessage }
 		json.Unmarshal(raw, &tr)
 		if (len(res.Heatmap) == 0) != (len(tr.Trending) == 0) {
@@ -104,9 +105,19 @@ func TestMockEmptyReturnsNothing(t *testing.T) {
 	}
 }
 
+// Like the live API, the mock rejects more than one entity per trending call.
+func TestMockTrendingRejectsSeveralEntities(t *testing.T) {
+	_, err := NewMock().Raw(context.Background(), "/v2/trending", url.Values{
+		"filter.type": {TypeArtist}, "signal.interests.entities": {"mock-artist-01,mock-artist-02"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "only one") {
+		t.Fatalf("err = %v, want the one-entity error", err)
+	}
+}
+
 func TestMockTrendIsWeeklyOverTheRange(t *testing.T) {
 	end := time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)
-	raw, err := NewMock().Trending(context.Background(), TypeArtist, []string{"mock-artist-07"}, end.AddDate(0, 0, -90), end)
+	raw, err := NewMock().Trending(context.Background(), TypeArtist, "mock-artist-07", end.AddDate(0, 0, -90), end)
 	if err != nil {
 		t.Fatal(err)
 	}

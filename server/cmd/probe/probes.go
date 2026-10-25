@@ -112,15 +112,15 @@ func (p *prober) seedArtist(ctx context.Context) (qloo.Entity, error) {
 }
 
 // 1. Heatmap. It asks twice: once exactly as local_heatmap does (default
-// boundary, which the map draws), once with the neighborhood boundary the
-// plan names.
+// boundary, which the map draws), once with the locality boundary (the API
+// accepts only urn:geohash or urn:entity:locality, not "neighborhood").
 func (p *prober) heatmap(ctx context.Context) (verdict, error) {
 	a, err := p.seedArtist(ctx)
 	if err != nil {
 		return verdict{}, err
 	}
 	best, parts, ok := fail, []string{}, 0
-	for _, boundary := range []string{"", "neighborhood"} {
+	for _, boundary := range []string{"", "urn:entity:locality"} {
 		q := url.Values{
 			"filter.type":               {qloo.TypeHeatmap},
 			"signal.interests.entities": {a.EntityID},
@@ -203,19 +203,26 @@ func (p *prober) genreTag(ctx context.Context) (*qloo.Tag, error) {
 	return nil, fmt.Errorf("no genre tag among %d tags for %q", len(tags), p.cfg.Genre)
 }
 
-// recommend asks for artists the venue's neighborhood likes, the way
-// recommend_artists does, capped at popMax when it is in (0, 1).
+// recommend asks for artists who share the seed artist's audience and
+// over-index around the venue, the way discover_artists does, capped at
+// popMax when it is in (0, 1).
 func (p *prober) recommend(ctx context.Context, popMax float64) ([]qloo.Entity, error) {
+	seed, err := p.seedArtist(ctx)
+	if err != nil {
+		return nil, err
+	}
 	tag, err := p.genreTag(ctx)
 	if err != nil {
 		return nil, err
 	}
+	v := p.cfg.Venue
 	q := url.Values{
-		"filter.type":           {qloo.TypeArtist},
-		"signal.location.query": {p.cfg.Venue.LocationQuery()},
-		"filter.tags":           {tag.URN()},
-		"bias.trends":           {"high"},
-		"take":                  {"15"},
+		"filter.type":               {qloo.TypeArtist},
+		"signal.interests.entities": {seed.EntityID},
+		"signal.interests.tags":     {tag.URN()},
+		"signal.location":           {v.Point()},
+		"signal.location.radius":    {"5000"},
+		"take":                      {"15"},
 	}
 	if popMax > 0 && popMax < 1 {
 		q.Set("filter.popularity.max", fmt.Sprint(popMax))
@@ -227,7 +234,7 @@ func (p *prober) recommend(ctx context.Context, popMax float64) ([]qloo.Entity, 
 	return res.Entities, nil
 }
 
-// 2. Location-signaled recs, uncapped and then capped toward mid-tier acts.
+// 2. Seed- and location-signaled recs, uncapped and then capped toward mid-tier acts.
 func (p *prober) recommendations(ctx context.Context) (verdict, error) {
 	open, err := p.recommend(ctx, 0)
 	if err != nil {
@@ -253,7 +260,7 @@ func (p *prober) recommendations(ctx context.Context) (verdict, error) {
 	}
 	switch {
 	case len(open) == 0 && len(capped) == 0:
-		return verdict{fail, "no recs for " + p.cfg.Venue.LocationQuery()}, nil
+		return verdict{fail, "no recs around " + p.cfg.Venue.LocationQuery()}, nil
 	case len(capped) == 0:
 		p.recs = open
 		return verdict{weak, fmt.Sprintf("%d uncapped recs (median popularity %.3f) but none under popularity %.2f", len(open), spreadOf(popularities(open)).med, p.cfg.PopMax)}, nil
@@ -265,7 +272,9 @@ func (p *prober) recommendations(ctx context.Context) (verdict, error) {
 	return verdict{pass, fmt.Sprintf("%d uncapped, %d mid-tier recs (median popularity %.3f); check the names are plausible", len(open), len(capped), spreadOf(pops).med)}, nil
 }
 
-// 3. Trending, per artist (to see coverage) and batched (as momentum calls it).
+// 3. Trending, one artist per call over six months, as momentum calls it.
+// It also checks that the series actually move: the hackathon host has served
+// a constant percentile for every artist.
 func (p *prober) trending(ctx context.Context) (verdict, error) {
 	if len(p.recs) == 0 {
 		recs, err := p.recommend(ctx, p.cfg.PopMax)
@@ -283,20 +292,24 @@ func (p *prober) trending(ctx context.Context) (verdict, error) {
 	}
 
 	end := time.Now()
-	start := end.AddDate(0, 0, -90)
-	populated, points := 0, 0
+	start := end.AddDate(0, -6, 0)
+	populated, points, moving := 0, 0, 0
 	var fields []string
 	for _, e := range ents {
-		raw, err := p.c.Trending(ctx, qloo.TypeArtist, []string{e.EntityID}, start, end)
+		raw, err := p.c.Trending(ctx, qloo.TypeArtist, e.EntityID, start, end)
 		if err != nil {
 			p.say("%-28s error: %v", e.Name, err)
 			continue
 		}
 		n, where, first := series(raw)
-		p.say("%-28s %3d points in %s", e.Name, n, where)
+		s := spreadOf(percentiles(raw))
+		p.say("%-28s %3d points in %s, percentile %s", e.Name, n, where, s)
 		if n > 0 {
 			populated++
 			points += n
+			if s.max > s.min {
+				moving++
+			}
 			if fields == nil {
 				fields = keysOf(first, "")
 			}
@@ -306,24 +319,15 @@ func (p *prober) trending(ctx context.Context) (verdict, error) {
 		p.say("point fields %v", fields)
 	}
 
-	ids := make([]string, len(ents))
-	for i, e := range ents {
-		ids[i] = e.EntityID
-	}
-	if raw, err := p.c.Trending(ctx, qloo.TypeArtist, ids, start, end); err != nil {
-		p.say("batched (%d ids, as momentum sends them): error: %v", len(ids), err)
-	} else {
-		n, where, _ := series(raw)
-		p.say("batched (%d ids, as momentum sends them): %d points in %s", len(ids), n, where)
-	}
-
-	text := fmt.Sprintf("%d/%d artists have a 90-day series", populated, len(ents))
+	text := fmt.Sprintf("%d/%d artists have a 6-month series", populated, len(ents))
 	if populated > 0 {
-		text += fmt.Sprintf(" (avg %d points)", points/populated)
+		text += fmt.Sprintf(" (avg %d points), %d of them move", points/populated, moving)
 	}
 	switch {
 	case populated == 0:
 		return verdict{fail, text}, nil
+	case moving == 0:
+		return verdict{weak, text + ": every series is constant, so there is no momentum signal"}, nil
 	case populated*10 < len(ents)*7:
 		return verdict{weak, text}, nil
 	}
@@ -674,6 +678,24 @@ func popularities(ents []qloo.Entity) []float64 {
 	out := make([]float64, len(ents))
 	for i, e := range ents {
 		out[i] = e.Popularity
+	}
+	return out
+}
+
+// percentiles reads population_percentile from each point of a /v2/trending
+// result in its live shape, results.trending.
+func percentiles(raw json.RawMessage) []float64 {
+	var body struct {
+		Trending []struct {
+			Percentile *float64 `json:"population_percentile"`
+		} `json:"trending"`
+	}
+	json.Unmarshal(raw, &body)
+	var out []float64
+	for _, pt := range body.Trending {
+		if pt.Percentile != nil {
+			out = append(out, *pt.Percentile)
+		}
 	}
 	return out
 }

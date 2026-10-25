@@ -57,8 +57,8 @@ func TestProbeAllAgainstMock(t *testing.T) {
 	}
 	for _, want := range []string{
 		"1. Heatmap", "2. Location-signaled", "3. Trending", "4. Compare", "5. Demographics", "6. Cross-domain", "7. Harness",
-		"boundary=neighborhood",
-		"10/10 artists have a 90-day series",
+		"boundary=urn:entity:locality",
+		"10/10 artists have a 6-month series",
 		"strongest skew",
 		"location{lat,lon} in 8/8; qloo.Entity.Coordinates() parsed 8/8",
 		"7  SKIP",

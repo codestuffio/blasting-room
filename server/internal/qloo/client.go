@@ -209,15 +209,15 @@ func (c *Client) Insights(ctx context.Context, q url.Values) (*InsightsResults, 
 	return &out.Results, nil
 }
 
-// Trending calls GET /v2/trending for popularity over time.
-func (c *Client) Trending(ctx context.Context, entityType string, entityIDs []string, start, end time.Time) (json.RawMessage, error) {
+// Trending calls GET /v2/trending for one entity's popularity over time.
+// The endpoint takes exactly one entity, and windows much shorter than six
+// months come back empty.
+func (c *Client) Trending(ctx context.Context, entityType, entityID string, start, end time.Time) (json.RawMessage, error) {
 	q := url.Values{
-		"filter.type":       {entityType},
-		"filter.start_date": {start.Format("2006-01-02")},
-		"filter.end_date":   {end.Format("2006-01-02")},
-	}
-	if len(entityIDs) > 0 {
-		q.Set("signal.interests.entities", strings.Join(entityIDs, ","))
+		"filter.type":               {entityType},
+		"filter.start_date":         {start.Format("2006-01-02")},
+		"filter.end_date":           {end.Format("2006-01-02")},
+		"signal.interests.entities": {entityID},
 	}
 	var out struct {
 		Results json.RawMessage `json:"results"`

@@ -33,8 +33,10 @@ type withTrend struct {
 	trend *Trend
 }
 
-// The /v2/trending point shape is not yet verified against a live key, so
-// parseTrend accepts the field names seen in Qloo's docs, in order of preference.
+// Live /v2/trending points (checked Oct 2026) are {date, population_percentile,
+// population_rank, population_rank_velocity, velocity_fold_change,
+// population_percent_delta} under results.trending. The other names are
+// fallbacks from Qloo's docs.
 var (
 	trendDateKeys     = []string{"date", "day", "week", "start_date"}
 	trendPercentKeys  = []string{"population_percentile", "percentile", "popularity"}
@@ -102,7 +104,7 @@ func firstNumber(m map[string]any, keys []string) (float64, bool) {
 // started and ended, and which way it is heading.
 func trendSummary(entityID string, pts []TrendPoint) map[string]any {
 	if len(pts) == 0 {
-		return map[string]any{"entity_id": entityID, "note": "no trending data for this artist in the last 90 days"}
+		return map[string]any{"entity_id": entityID, "note": "no trending data for this artist in the last 6 months"}
 	}
 	first, last := pts[0], pts[len(pts)-1]
 	peak := first
@@ -134,5 +136,20 @@ func trendSummary(entityID string, pts []TrendPoint) map[string]any {
 	if last.Velocity != nil {
 		m["latest_velocity"] = *last.Velocity
 	}
+	if isConstant(pts) {
+		m["constant"] = true
+		m["note"] = "Qloo reports the same value at every point: no momentum signal either way. Do not call this act rising or stalled."
+	}
 	return m
+}
+
+// isConstant reports whether every point has the same percentile and no
+// velocity. The hackathon host serves series like this for most artists.
+func isConstant(pts []TrendPoint) bool {
+	for _, p := range pts {
+		if p.Percentile != pts[0].Percentile || p.Velocity != nil && *p.Velocity != 0 {
+			return false
+		}
+	}
+	return true
 }
