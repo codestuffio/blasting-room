@@ -24,4 +24,6 @@ COPY --from=web /web/build /app/public
 ENV PORT=8080 STATIC_DIR=/app/public
 EXPOSE 8080
 USER nonroot
+# Distroless has no curl or wget, so the binary checks itself.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/app/blastingroom", "-healthcheck"]
 ENTRYPOINT ["/app/blastingroom"]

@@ -15,7 +15,7 @@ A booking agent for independent music venues, grounded in Qloo's taste graph. It
   - `internal/api` — `net/http` routes: `/api/health`, `/api/venues`, `POST /api/runs` (SSE stream), and static SPA serving with a `200.html` fallback
 - `web/` — SvelteKit 3 + Svelte 5 (runes), `adapter-static` single-page app
   - lib imports use `#lib/...` with explicit extensions, e.g. `#lib/types.ts`
-- `Dockerfile` — Node builds the web app → Go builds the binary → distroless runtime. `fly.toml` deploys it.
+- `Dockerfile` — Node builds the web app → Go builds the binary → distroless runtime. It deploys to Coolify behind a Cloudflare Tunnel; the steps are in `docs/DEPLOY.md`.
 
 ## Commands
 
@@ -44,6 +44,10 @@ make docker
     - A `/v2/analysis/compare` response for two artists is about 44 KB, mostly because every shared tag repeats both groups' entities. `compare_audiences` sends the model `summarizeCompare` (the top shared tags with scores, plus the tags only one side has) instead of the raw response.
     - `output.heatmap.boundary` accepts only `urn:geohash` or `urn:entity:locality`, and `urn:entity:locality` returned 0 cells for Chicago. Keep the default boundary, which the map draws.
 - **Never commit Qloo response data** (hackathon terms). Caching stays in memory on the server.
+- **Deploy (Coolify + Cloudflare Tunnel):**
+  - Rate limiting keys on `BR_CLIENT_IP_HEADER` (`CF-Connecting-IP` in production), never on raw `X-Forwarded-For`, which clients can forge.
+  - `POST /api/runs` flushes its headers at once and sends `: keepalive` comments (`Server.Heartbeat`, default 15s). Clients must skip frames with no `event:` line.
+  - The image is distroless with no curl, so its `HEALTHCHECK` runs `blastingroom -healthcheck`.
 - **Without `QLOO_API_KEY`, the server uses the mock transport** (`qloo.NewMock`). Mock names look like "Mock Artist 07" so they are never mistaken for real data.
   - `QLOO_MOCK_SCENARIO` (`full`, `sparse`, `degraded`, `empty`) serves thin, failing or empty data, to exercise the agent's critic and the UI's degraded paths. Tests use `qloo.NewMockScenario`.
   - The client retries a 429, 502, 503 or 504 (or no response) once.

@@ -73,6 +73,7 @@ That runs `go vet`, the Go tests and `svelte-check`.
 | `BR_MODEL` | `claude-opus-5-5` | |
 | `BR_EFFORT` | `medium` | `low` / `medium` / `high` / `xhigh` / `max` |
 | `BR_MAX_TURNS` | `20` | Upper bound on agent turns per run |
+| `BR_CLIENT_IP_HEADER` | — | Header from a trusted proxy holding the visitor's IP, for rate limiting. Set `CF-Connecting-IP` behind a Cloudflare Tunnel, and only when every request comes through it |
 | `PORT` | `8080` | |
 | `STATIC_DIR` | `../web/build` | Built SPA served by the Go binary |
 
@@ -88,9 +89,9 @@ docker build -t blasting-room .
 docker run -p 8080:8080 --env-file .env blasting-room
 ```
 
-The image runs on Fly.io as-is (see `fly.toml`), as well as on Railway or Render. Set `ANTHROPIC_API_KEY` and `QLOO_API_KEY` as secrets.
+The public demo runs on Coolify behind a Cloudflare Tunnel. [docs/DEPLOY.md](docs/DEPLOY.md) has the steps. The image runs on any container host. It needs `ANTHROPIC_API_KEY` and `QLOO_API_KEY`, and it checks its own health with `blastingroom -healthcheck`, because the distroless image has no curl.
 
-The public demo has guardrails: 6 runs per IP per hour and at most 4 concurrent runs.
+The public demo has guardrails: 6 runs per visitor IP per hour and at most 4 concurrent runs. Run streams send a keepalive comment every 15 seconds, so proxies don't drop them while the agent thinks.
 
 ## Data handling
 

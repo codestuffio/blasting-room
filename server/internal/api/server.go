@@ -2,6 +2,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,6 +28,14 @@ type Server struct {
 	MockScenario string // full | sparse | degraded | empty, when QlooMock
 	StaticDir    string
 	Log          *slog.Logger
+	// ClientIPHeader names a header set by a trusted proxy that holds the
+	// visitor's IP, e.g. CF-Connecting-IP behind a Cloudflare Tunnel. Empty
+	// means the connection's remote address. Only set it when every request
+	// arrives through that proxy, or visitors can forge it.
+	ClientIPHeader string
+	// Heartbeat is how often a run's event stream sends a comment line, so
+	// proxies don't close it while the agent is quiet. Zero means 15s.
+	Heartbeat time.Duration
 
 	slots   chan struct{} // caps concurrent agent runs
 	limiter *ipLimiter
@@ -82,7 +91,7 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "offer_artist is required for vet_offer"})
 		return
 	}
-	if !s.limiter.allow(clientIP(r)) {
+	if !s.limiter.allow(s.clientIP(r)) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "demo rate limit reached, try again later"})
 		return
 	}
@@ -103,6 +112,7 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
+	flusher.Flush() // send headers now, so a proxy sees the response start
 
 	// Tool results arrive from concurrent goroutines.
 	var mu sync.Mutex
@@ -116,6 +126,28 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", e.Type, b)
 		flusher.Flush()
 	}
+
+	// A comment line keeps the stream alive while the agent thinks; Cloudflare
+	// closes connections that go quiet. Clients skip frames with no event.
+	stop := make(chan struct{})
+	beats := make(chan struct{})
+	go func() {
+		defer close(beats)
+		t := time.NewTicker(cmp.Or(s.Heartbeat, 15*time.Second))
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				mu.Lock()
+				fmt.Fprint(w, ": keepalive\n\n")
+				flusher.Flush()
+				mu.Unlock()
+			}
+		}
+	}()
+	defer func() { close(stop); <-beats }() // never write after the handler returns
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
@@ -153,9 +185,13 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	json.NewEncoder(w).Encode(v)
 }
 
-func clientIP(r *http.Request) string {
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		return strings.TrimSpace(strings.Split(fwd, ",")[0])
+// clientIP is the visitor's IP for rate limiting. X-Forwarded-For is never
+// trusted on its own: its first entry is whatever the client sent.
+func (s *Server) clientIP(r *http.Request) string {
+	if s.ClientIPHeader != "" {
+		if ip := net.ParseIP(strings.TrimSpace(r.Header.Get(s.ClientIPHeader))); ip != nil {
+			return ip.String()
+		}
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

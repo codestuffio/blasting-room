@@ -95,7 +95,7 @@ A single page, exportable to PDF:
   - Qloo, at `https://hackathon.api.qloo.com`
   - Anthropic
   - Ticketmaster Discovery later, for competing events (5K calls/day, 5 req/s)
-- **Hosting:** a single multi-stage Docker image (Node builds the web app → Go builds the binary → a small runtime image). It deploys as-is to Railway, Fly or Render.
+- **Hosting:** a single multi-stage Docker image (Node builds the web app → Go builds the binary → a small runtime image). It runs on a homelab Coolify instance, published through a Cloudflare Tunnel ([DEPLOY.md](DEPLOY.md)).
 - **Repo:** public GitHub, MIT license (make sure it shows in the About sidebar), README with setup and env vars.
 
 ## 7. Day-1 data probes (go/no-go before building)
