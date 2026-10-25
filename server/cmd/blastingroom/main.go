@@ -27,11 +27,16 @@ func main() {
 		q = qloo.New(key, qloo.WithBaseURL(env("QLOO_BASE_URL", qloo.DefaultBaseURL)))
 		log.Info("qloo: live", "base_url", env("QLOO_BASE_URL", qloo.DefaultBaseURL))
 	} else {
-		q = qloo.NewMock()
-		log.Warn("qloo: QLOO_API_KEY not set, serving synthetic mock data")
+		scenario, err := qloo.ParseMockScenario(os.Getenv("QLOO_MOCK_SCENARIO"))
+		if err != nil {
+			log.Error("qloo: bad QLOO_MOCK_SCENARIO", "err", err)
+			os.Exit(1)
+		}
+		q = qloo.NewMockScenario(scenario)
+		log.Warn("qloo: QLOO_API_KEY not set, serving synthetic mock data", "scenario", scenario)
 	}
 
-	srv := &api.Server{QlooMock: q.IsMock(), StaticDir: env("STATIC_DIR", "../web/build"), Log: log}
+	srv := &api.Server{QlooMock: q.IsMock(), MockScenario: string(q.MockScenario()), StaticDir: env("STATIC_DIR", "../web/build"), Log: log}
 	if os.Getenv("ANTHROPIC_API_KEY") != "" {
 		maxTurns, _ := strconv.Atoi(env("BR_MAX_TURNS", "20"))
 		srv.Runner = agent.New(anthropic.NewClient(), q, agent.Config{

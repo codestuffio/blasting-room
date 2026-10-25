@@ -44,7 +44,7 @@ func New(claude anthropic.Client, q *qloo.Client, cfg Config) *Agent {
 
 // Event is streamed to the UI as the agent works.
 type Event struct {
-	Type string `json:"type"` // start | progress | text | tool_call | tool_result | geo | memo | error | done
+	Type string `json:"type"` // start | progress | text | tool_call | tool_result | geo | trend | memo | error | done
 	Data any    `json:"data,omitempty"`
 }
 
@@ -167,11 +167,18 @@ func (a *Agent) runTools(ctx context.Context, calls []anthropic.BetaToolUseBlock
 			start := time.Now()
 			out, err := a.exec(ctx, byName, c.Name, raw)
 			res := ToolResult{ID: c.ID, Name: c.Name, OK: err == nil, DurationMS: time.Since(start).Milliseconds()}
-			if g, ok := out.(withGeo); ok {
+			switch g := out.(type) {
+			case withGeo:
 				out = g.model
 				if g.geo != nil {
 					g.geo.ToolCallID = c.ID
 					emit(Event{Type: "geo", Data: g.geo})
+				}
+			case withTrend:
+				out = g.model
+				if g.trend != nil {
+					g.trend.ToolCallID = c.ID
+					emit(Event{Type: "trend", Data: g.trend})
 				}
 			}
 			var content string

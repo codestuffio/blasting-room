@@ -27,7 +27,7 @@ func (stubRunner) Run(_ context.Context, _ agent.Request, emit func(agent.Event)
 func newTestServer(t *testing.T, r Runner) *httptest.Server {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "200.html"), []byte("<html>app</html>"), 0o644)
-	s := &Server{Runner: r, QlooMock: true, StaticDir: dir, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	s := &Server{Runner: r, QlooMock: true, MockScenario: "sparse", StaticDir: dir, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	return srv
@@ -45,7 +45,7 @@ func get(t *testing.T, url string) (int, string) {
 
 func TestHealthVenuesAndSPAFallback(t *testing.T) {
 	srv := newTestServer(t, nil)
-	if code, body := get(t, srv.URL+"/api/health"); code != 200 || !strings.Contains(body, `"qloo_mode":"mock"`) || !strings.Contains(body, `"agent_ready":false`) {
+	if code, body := get(t, srv.URL+"/api/health"); code != 200 || !strings.Contains(body, `"qloo_mode":"mock"`) || !strings.Contains(body, `"agent_ready":false`) || !strings.Contains(body, `"mock_scenario":"sparse"`) {
 		t.Fatalf("health: %d %s", code, body)
 	}
 	if code, body := get(t, srv.URL+"/api/venues"); code != 200 || !strings.Contains(body, "lantern") {

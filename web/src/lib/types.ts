@@ -15,7 +15,11 @@ export interface Health {
 	ok: boolean;
 	agent_ready: boolean;
 	qloo_mode: 'mock' | 'live';
+	mock_scenario?: MockScenario;
 }
+
+// Which synthetic data the mock serves (QLOO_MOCK_SCENARIO on the server).
+export type MockScenario = 'full' | 'sparse' | 'degraded' | 'empty';
 
 export type Mode = 'fill_date' | 'vet_offer';
 
@@ -93,12 +97,31 @@ export interface Geo {
 	places?: GeoPlace[];
 }
 
+// Popularity series from the momentum tool (the "trend" event). Like Geo it is
+// for the UI only; the model sees a start/end/direction summary.
+export interface TrendPoint {
+	date: string;
+	percentile: number;
+	velocity?: number;
+}
+
+export interface TrendSeries {
+	entity_id: string;
+	points: TrendPoint[];
+}
+
+export interface Trend {
+	tool_call_id: string;
+	series: TrendSeries[];
+}
+
 export type AgentEvent =
 	| { type: 'start'; data: { venue: Venue; model: string; qloo_mock: boolean } }
 	| { type: 'progress' | 'text'; data: string }
 	| { type: 'tool_call'; data: ToolCall }
 	| { type: 'tool_result'; data: ToolResult }
 	| { type: 'geo'; data: Geo }
+	| { type: 'trend'; data: Trend }
 	| { type: 'memo'; data: Memo }
 	| { type: 'error'; data: { message: string } }
 	| { type: 'done'; data?: { turns: number } };

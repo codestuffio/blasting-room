@@ -15,6 +15,13 @@
 	let offerArtist = $state('');
 	let notes = $state('');
 
+	const scenarioNote = {
+		full: '',
+		sparse: 'thin coverage, many artists missing heatmap, trend or audience data',
+		degraded: 'heatmap down and some Qloo calls failing',
+		empty: 'every Qloo call returns nothing'
+	};
+
 	let events = $state<TraceEvent[]>([]);
 	let memo = $state<Memo | null>(null);
 	let running = $state(false);
@@ -23,6 +30,7 @@
 
 	let venue = $derived(venues.find((v) => v.id === venueId));
 	let geo = $derived(events.flatMap((e) => (e.type === 'geo' ? [e.data] : [])));
+	let trends = $derived(events.flatMap((e) => (e.type === 'trend' ? [e.data] : [])));
 	let canRun = $derived(
 		!!health?.agent_ready && !!venue && !running && (mode === 'fill_date' || offerArtist.trim() !== '')
 	);
@@ -93,6 +101,9 @@
 		<p class="banner">
 			<span class="led on"></span>
 			Running on synthetic placeholder data. Results show the workflow, not real taste insights.
+			{#if health.mock_scenario && health.mock_scenario !== 'full'}
+				<span class="scenario">Scenario: {health.mock_scenario} · {scenarioNote[health.mock_scenario]}</span>
+			{/if}
 		</p>
 	{/if}
 
@@ -151,7 +162,7 @@
 			</section>
 			<section class="memo-col">
 				{#if memo && venue}
-					<MemoView {memo} {venue} {geo} />
+					<MemoView {memo} {venue} {geo} {trends} />
 				{:else}
 					{#if venue && geo.length}
 						<VenueMap {venue} {geo} />
@@ -218,6 +229,11 @@
 		border: 1px solid var(--line);
 		background: var(--panel);
 		font-size: 0.9rem;
+	}
+	.scenario {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--accent-text);
 	}
 	fieldset {
 		border: 1px solid var(--line);
