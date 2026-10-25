@@ -72,16 +72,16 @@ func (m *mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	case "/v2/insights":
 		body = map[string]any{"results": mockInsights(q, sparse)}
 	case "/v2/trending":
+		if strings.Contains(q.Get("signal.interests.entities"), ",") {
+			return jsonResponse(r, http.StatusBadRequest, map[string]any{"errors": []map[string]any{{"message": "signal.interests.entities.ids must contain only one non-empty string"}}}), nil
+		}
 		trend := []map[string]any{}
 		if id := q.Get("signal.interests.entities"); !(sparse && thin(id)) {
 			trend = mockTrend(id, q.Get("filter.start_date"), q.Get("filter.end_date"))
 		}
 		body = map[string]any{"results": map[string]any{"trending": trend}}
 	case "/v2/analysis/compare":
-		body = map[string]any{"results": map[string]any{
-			"note": "mock compare output",
-			"tags": mockTags(q.Get("a.signal.interests.entities") + q.Get("b.signal.interests.entities")),
-		}}
+		body = map[string]any{"results": mockCompare(q.Get("a.signal.interests.entities"), q.Get("b.signal.interests.entities"))}
 	default:
 		return jsonResponse(r, http.StatusNotFound, map[string]any{"error": "no mock for " + r.URL.Path}), nil
 	}
@@ -202,6 +202,24 @@ func mockTags(seed string) []map[string]any {
 		})
 	}
 	return out
+}
+
+// mockCompare mirrors the live compare shape: shared tags with a score that
+// repeat both groups' entities, tags only one group has, and shared entities.
+func mockCompare(a, b string) map[string]any {
+	group := func(ids string) []map[string]any {
+		out := []map[string]any{}
+		for _, id := range strings.Split(ids, ",") {
+			out = append(out, map[string]any{"entity_id": id, "name": mockName(id), "subtype": TypeArtist})
+		}
+		return out
+	}
+	shared := mockTags(a + b)
+	for i, t := range shared {
+		t["subtype"] = "urn:tag:genre:music"
+		t["query"] = map[string]any{"score": math.Round((0.6+float64(i)*0.08)*1000) / 1000, "a.signal.interests.entities": group(a), "b.signal.interests.entities": group(b)}
+	}
+	return map[string]any{"tags": shared, "a": mockTags(a), "b": mockTags(b), "matchEntities": []any{}}
 }
 
 func mockInsights(q url.Values, sparse bool) map[string]any {
@@ -349,7 +367,7 @@ func mockTrend(entity, start, end string) []map[string]any {
 	}
 	from, err := time.Parse("2006-01-02", start)
 	if err != nil || !from.Before(to) {
-		from = to.AddDate(0, 0, -90)
+		from = to.AddDate(0, -6, 0)
 	}
 	h := hash(entity)
 	slope := []float64{0.012, 0.001, -0.009}[h%3] // per week: rising, flat, falling

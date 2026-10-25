@@ -78,7 +78,7 @@ func TestRunLoopsThroughToolsToMemo(t *testing.T) {
 	fake := &fakeClaude{replies: []string{
 		reply("tool_use",
 			`{"type":"text","text":"Looking for local acts."}`,
-			toolUse("t1", "discover_artists", `{"trend_bias":"high"}`),
+			toolUse("t1", "discover_artists", `{"seed_ids":["mock-artist-01"]}`),
 			toolUse("t2", "local_heatmap", `{"entity_id":"mock-artist-01"}`),
 		),
 		reply("tool_use", toolUse("t3", memoToolName, memoInput)),

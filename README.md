@@ -21,10 +21,10 @@ A Go tool-use loop on Claude drives a set of Qloo tools:
 |---|---|---|
 | `resolve_entity` | `/search` | name → entity ID |
 | `find_genre_tags` | `/v2/tags` | genre words → tag URNs |
-| `discover_artists` | `/v2/insights` (artist, location signal) | acts whose fans over-index near the venue |
+| `discover_artists` | `/v2/insights` (artist, seed + venue-point signals) | acts that share the room's audience and over-index near the venue |
 | `score_shortlist` | `/v2/insights` (`filter.results.entities`, explainability) | rank candidates, with reasons |
 | `local_heatmap` | `/v2/insights` (`urn:heatmap`) | where the fan base clusters vs. the venue |
-| `momentum` | `/v2/trending` | 90-day popularity trend, drawn as the memo's momentum chart |
+| `momentum` | `/v2/trending` | 6-month popularity trend, drawn as the memo's momentum chart |
 | `compare_audiences` | `/v2/analysis/compare` | headliner/support overlap |
 | `audience_demographics` | `/v2/insights` (`urn:demographics`) | age/gender skew → ticket tier |
 | `co_promo_partners` | `/v2/insights` (cross-domain place/podcast/brand) | nearby bars, podcasts, sponsors |

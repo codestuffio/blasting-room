@@ -15,6 +15,8 @@
 			.filter((l) => l.points.length > 1)
 	);
 	let missing = $derived(picks.slice(0, 2).filter((p) => p.entity_id && !(byEntity.get(p.entity_id)?.length ?? 0)));
+	// Qloo's hackathon data often repeats one value for the whole window.
+	let flat = $derived(lines.length > 0 && lines.every((l) => l.points.every((p) => p.percentile === l.points[0].percentile)));
 
 	// Every date any series has, oldest first: the crosshair snaps to these.
 	let dates = $derived([...new Set(lines.flatMap((l) => l.points.map((p) => p.date)))].sort());
@@ -113,7 +115,7 @@
 					{width}
 					{height}
 					role="slider"
-					aria-label={`Popularity percentile over the last 90 days for ${lines.map((l) => l.name).join(', ')}. Use the arrow keys to step through dates.`}
+					aria-label={`Popularity percentile over the last 6 months for ${lines.map((l) => l.name).join(', ')}. Use the arrow keys to step through dates.`}
 					aria-valuemin={0}
 					aria-valuemax={dates.length - 1}
 					aria-valuenow={active ?? dates.length - 1}
@@ -170,7 +172,8 @@
 		</div>
 
 		<p class="caption muted">
-			Qloo popularity percentile over the last 90 days: p80 means more popular than 80% of artists.
+			Qloo popularity percentile over the last 6 months: p80 means more popular than 80% of artists.
+			{#if flat}Qloo reports no movement over this window, so it says nothing about momentum.{/if}
 			{#if missing.length}No trend data for {missing.map((p) => p.name).join(' or ')}.{/if}
 		</p>
 

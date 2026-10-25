@@ -30,7 +30,6 @@ const memoToolName = "submit_booking_memo"
 // toolset binds the Qloo tools to one venue so the agent never has to pass
 // coordinates or locality strings around itself.
 func toolset(q *qloo.Client, v Venue) []tool {
-	loc := v.LocationQuery()
 	return []tool{
 		{
 			name:        "resolve_entity",
@@ -75,47 +74,53 @@ func toolset(q *qloo.Client, v Venue) []tool {
 		},
 		{
 			name: "discover_artists",
-			description: "Find artists whose fans over-index in the venue's neighborhood, optionally within genre tags. " +
-				"Use popularity_max to avoid acts too big for the room (0-1 percentile) and trend_bias to favour rising acts.",
+			description: "Find artists whose fans over-index around the venue and who share an audience with the seed artists. " +
+				"Genre tags bias the results toward a genre; they are not a hard filter. " +
+				"Use popularity_max to avoid acts too big for the room (0-1 percentile): mid-size touring acts sit around 0.80-0.93, so 0.9 suits a 300-700 cap room.",
 			properties: map[string]any{
+				"seed_ids":       arr(str("Artist entity_id the room already sells well, from resolve_entity (1-5)")),
 				"genre_tags":     arr(str("Tag URN from find_genre_tags")),
 				"popularity_max": map[string]any{"type": "number", "description": "Upper popularity percentile, 0-1"},
-				"trend_bias":     enum("How much to favour trending acts", "off", "low", "medium", "high"),
 			},
+			required: []string{"seed_ids"},
 			run: func(ctx context.Context, raw json.RawMessage) (any, error) {
 				var in struct {
+					SeedIDs       []string `json:"seed_ids"`
 					GenreTags     []string `json:"genre_tags"`
 					PopularityMax float64  `json:"popularity_max"`
-					TrendBias     string   `json:"trend_bias"`
 				}
-				if err := json.Unmarshal(raw, &in); err != nil {
-					return nil, err
+				if err := json.Unmarshal(raw, &in); err != nil || len(in.SeedIDs) == 0 {
+					return nil, fmt.Errorf("seed_ids is required: resolve the room's favourite artists with resolve_entity first")
 				}
-				p := url.Values{"filter.type": {qloo.TypeArtist}, "signal.location.query": {loc}, "take": {"15"}}
+				// Location alone returns city-wide superstars, and filter.tags returns
+				// nothing for artists, so the seeds and tags go in as signals.
+				p := url.Values{
+					"filter.type":               {qloo.TypeArtist},
+					"signal.interests.entities": {strings.Join(in.SeedIDs, ",")},
+					"take":                      {"15"},
+				}
+				v.setLocationSignal(p)
 				if len(in.GenreTags) > 0 {
-					p.Set("filter.tags", strings.Join(in.GenreTags, ","))
-					p.Set("operator.filter.tags", "union")
+					p.Set("signal.interests.tags", strings.Join(in.GenreTags, ","))
 				}
 				if in.PopularityMax > 0 && in.PopularityMax < 1 {
 					p.Set("filter.popularity.max", fmt.Sprint(in.PopularityMax))
-				}
-				if in.TrendBias != "" {
-					p.Set("bias.trends", in.TrendBias)
 				}
 				res, err := q.Insights(ctx, p)
 				if err != nil {
 					return nil, err
 				}
-				return entitiesOrNote(res.Entities, "Try fewer genre tags, a higher popularity_max, or no trend_bias."), nil
+				return entitiesOrNote(res.Entities, "Try fewer genre_tags, a higher popularity_max, or different seed_ids."), nil
 			},
 		},
 		{
 			name: "score_shortlist",
-			description: "Rank specific candidate artists against the venue neighborhood's taste (and optional seed artists the room already sells well). " +
-				"Returns affinity per candidate plus Qloo's explanation of which signals drove it.",
+			description: "Rank specific candidate artists against the taste around the venue and the seed artists the room already sells well. " +
+				"Returns affinity per candidate, Qloo's explanation of which seeds drove it (only when seed_ids are given), " +
+				"and no_local_signal: candidates Qloo dropped because it has no local data on them.",
 			properties: map[string]any{
 				"candidate_ids": arr(str("Artist entity_id")),
-				"seed_ids":      arr(str("Artist entity_id the room is known for (optional)")),
+				"seed_ids":      arr(str("Artist entity_id the room is known for (recommended)")),
 			},
 			required: []string{"candidate_ids"},
 			run: func(ctx context.Context, raw json.RawMessage) (any, error) {
@@ -129,9 +134,9 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				p := url.Values{
 					"filter.type":             {qloo.TypeArtist},
 					"filter.results.entities": {strings.Join(in.CandidateIDs, ",")},
-					"signal.location.query":   {loc},
 					"feature.explainability":  {"true"},
 				}
+				v.setLocationSignal(p)
 				if len(in.SeedIDs) > 0 {
 					p.Set("signal.interests.entities", strings.Join(in.SeedIDs, ","))
 				}
@@ -139,7 +144,10 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return entitiesOrNote(res.Entities, "Check the candidate_ids came from resolve_entity or discover_artists; drop seed_ids and retry."), nil
+				if len(res.Entities) == 0 {
+					return entitiesOrNote(nil, "Check the candidate_ids came from resolve_entity or discover_artists; drop seed_ids and retry."), nil
+				}
+				return withUnscored(compactEntities(res.Entities), in.CandidateIDs), nil
 			},
 		},
 		{
@@ -165,10 +173,11 @@ func toolset(q *qloo.Client, v Venue) []tool {
 			},
 		},
 		{
-			name:        "momentum",
-			description: "Popularity trend over the last 90 days for up to 5 artists (percentile and velocity over time).",
-			properties:  map[string]any{"entity_ids": arr(str("Artist entity_id"))},
-			required:    []string{"entity_ids"},
+			name: "momentum",
+			description: "Popularity trend over the last 6 months for up to 5 artists (percentile and velocity over time). " +
+				"A series marked constant carries no momentum signal: Qloo often reports the same value at every point.",
+			properties: map[string]any{"entity_ids": arr(str("Artist entity_id"))},
+			required:   []string{"entity_ids"},
 			run: func(ctx context.Context, raw json.RawMessage) (any, error) {
 				var in struct {
 					EntityIDs []string `json:"entity_ids"`
@@ -179,8 +188,8 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if len(in.EntityIDs) > 5 {
 					in.EntityIDs = in.EntityIDs[:5]
 				}
-				// One request per artist, so each series is attributable to its artist
-				// whatever shape a batched response takes.
+				// One request per artist: /v2/trending takes a single entity. Windows
+				// much shorter than 6 months come back empty.
 				end := time.Now()
 				raws := make([]json.RawMessage, len(in.EntityIDs))
 				errs := make([]error, len(in.EntityIDs))
@@ -189,7 +198,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 					wg.Add(1)
 					go func() {
 						defer wg.Done()
-						raws[i], errs[i] = q.Trending(ctx, qloo.TypeArtist, []string{id}, end.AddDate(0, 0, -90), end)
+						raws[i], errs[i] = q.Trending(ctx, qloo.TypeArtist, id, end.AddDate(0, -6, 0), end)
 					}()
 				}
 				wg.Wait()
@@ -223,8 +232,9 @@ func toolset(q *qloo.Client, v Venue) []tool {
 			},
 		},
 		{
-			name:        "compare_audiences",
-			description: "Compare the taste profiles of two groups of artists (e.g. a headliner vs. a candidate support act) to judge audience overlap.",
+			name: "compare_audiences",
+			description: "Compare the taste profiles of two groups of artists (e.g. a headliner vs. a candidate support act) to judge audience overlap. " +
+				"Returns the strongest shared tags with scores, the tags only one side has, and shared entities.",
 			properties: map[string]any{
 				"group_a": arr(str("Artist entity_id")),
 				"group_b": arr(str("Artist entity_id")),
@@ -242,7 +252,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return clip(res, 6000), nil
+				return summarizeCompare(res), nil
 			},
 		},
 		{
@@ -288,7 +298,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 					"take":                      {"8"},
 				}
 				if in.Kind == "place" {
-					p.Set("filter.location", fmt.Sprintf("POINT(%f %f)", v.Lon, v.Lat))
+					p.Set("filter.location", v.Point())
 					p.Set("filter.location.radius", "3000")
 				}
 				res, err := q.Insights(ctx, p)
@@ -359,6 +369,134 @@ func compactEntities(ents []qloo.Entity) []map[string]any {
 		out = append(out, m)
 	}
 	return out
+}
+
+// withUnscored lists the requested candidates Qloo left out of a ranking
+// alongside the scored ones. With a location signal, Qloo silently drops
+// artists it has no local data on, which the critic should know.
+func withUnscored(scored []map[string]any, requested []string) any {
+	got := map[string]bool{}
+	for _, m := range scored {
+		got[m["entity_id"].(string)] = true
+	}
+	var missing []string
+	for _, id := range requested {
+		if id = strings.TrimSpace(id); id != "" && !got[id] {
+			missing = append(missing, id)
+		}
+	}
+	if len(missing) == 0 {
+		return scored
+	}
+	return map[string]any{"results": scored, "no_local_signal": missing}
+}
+
+// compareTag is one tag in a /v2/analysis/compare result. Shared tags carry
+// a score; each also repeats both groups' entities, which is most of the
+// response's size and is dropped here.
+type compareTag struct {
+	Name    string `json:"name"`
+	TagID   string `json:"tag_id"`
+	Subtype string `json:"subtype"`
+	Query   struct {
+		Score *float64 `json:"score"`
+	} `json:"query"`
+}
+
+// kind is the tag family from its URN, e.g. "genre" for urn:tag:genre:music:post_punk.
+func (t compareTag) kind() string {
+	urn := t.Subtype
+	if urn == "" {
+		urn = t.TagID
+	}
+	if parts := strings.Split(urn, ":"); len(parts) > 2 && parts[0] == "urn" && parts[1] == "tag" {
+		return parts[2]
+	}
+	return ""
+}
+
+// Caps on what summarizeCompare keeps, so the result stays well under the
+// size where a raw compare response used to be cut off.
+const (
+	compareSharedMax   = 15
+	compareDistinctMax = 10
+	compareEntitiesMax = 5
+)
+
+// summarizeCompare keeps what the model needs from a compare result: the
+// strongest shared tags with their scores, the tags only one group has (in
+// Qloo's order), and the shared entities. Qloo repeats a tag name across tag
+// subtypes, so repeats are dropped. A result in another shape falls back to a
+// clipped copy.
+func summarizeCompare(raw json.RawMessage) any {
+	var res struct {
+		Tags          []compareTag `json:"tags"`
+		A             []compareTag `json:"a"`
+		B             []compareTag `json:"b"`
+		MatchEntities []struct {
+			Name string `json:"name"`
+		} `json:"matchEntities"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return clip(raw, 6000)
+	}
+	if len(res.Tags)+len(res.A)+len(res.B)+len(res.MatchEntities) == 0 {
+		return map[string]any{"note": "Qloo returned no comparison. Check both groups hold artist entity_ids from resolve_entity."}
+	}
+
+	shared := append([]compareTag(nil), res.Tags...)
+	sort.SliceStable(shared, func(i, j int) bool { return tagScore(shared[i]) > tagScore(shared[j]) })
+	sharedOut := []map[string]any{}
+	seen := map[string]bool{}
+	for _, t := range shared {
+		if len(sharedOut) == compareSharedMax {
+			break
+		}
+		if key := t.kind() + "/" + t.Name; seen[key] {
+			continue
+		} else {
+			seen[key] = true
+		}
+		m := map[string]any{"name": t.Name, "kind": t.kind()}
+		if t.Query.Score != nil {
+			m["score"] = round(*t.Query.Score)
+		}
+		sharedOut = append(sharedOut, m)
+	}
+	distinct := func(tags []compareTag) []string {
+		out := []string{}
+		seen := map[string]bool{}
+		for _, t := range tags {
+			if len(out) == compareDistinctMax {
+				break
+			}
+			if !seen[t.Name] {
+				seen[t.Name] = true
+				out = append(out, t.Name)
+			}
+		}
+		return out
+	}
+	entities := []string{}
+	for _, e := range res.MatchEntities[:min(compareEntitiesMax, len(res.MatchEntities))] {
+		entities = append(entities, e.Name)
+	}
+	return map[string]any{
+		"shared_tags":        sharedOut,
+		"shared_tag_count":   len(res.Tags),
+		"only_group_a":       distinct(res.A),
+		"only_group_a_count": len(res.A),
+		"only_group_b":       distinct(res.B),
+		"only_group_b_count": len(res.B),
+		"shared_entities":    entities,
+	}
+}
+
+func tagScore(t compareTag) float64 {
+	if t.Query.Score == nil {
+		return 0
+	}
+	return *t.Query.Score
 }
 
 func summarizeHeatmap(pts []qloo.HeatmapPoint, lat, lon float64) map[string]any {

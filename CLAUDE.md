@@ -35,6 +35,14 @@ make docker
   - Use host `https://hackathon.api.qloo.com`, header `X-Api-Key`, GET only.
   - Entities and tags must be resolved to IDs or URNs first.
   - Invalid parameters fail silently: you get an empty result, not an error.
+  - **Live behavior, probed Oct 25, 2026** (re-check with `make probe`):
+    - Artist discovery needs a seed: `signal.interests.entities` (the venue's `Seeds`) plus the location. Location alone returns city-wide superstars.
+    - Signal location with the venue point (`signal.location=POINT(lon lat)` plus `signal.location.radius`, via `Venue.setLocationSignal`). `signal.location.query` resolves "Logan Square, Chicago" but silently returns nothing for "East Austin, Austin" or "Ballard, Seattle".
+    - `filter.tags` returns nothing for artists, whatever the tag format. Pass genres as `signal.interests.tags`. `bias.trends` has no visible effect.
+    - Mid-size touring acts sit at popularity 0.80–0.93, so `filter.popularity.max=0.9` is the mid-tier cut.
+    - A ranking (`filter.results.entities`) with a location signal silently drops artists Qloo has no local data on. `score_shortlist` reports them as `no_local_signal`. Explainability is only filled in when seeds are passed.
+    - A `/v2/analysis/compare` response for two artists is about 44 KB, mostly because every shared tag repeats both groups' entities. `compare_audiences` sends the model `summarizeCompare` (the top shared tags with scores, plus the tags only one side has) instead of the raw response.
+    - `output.heatmap.boundary` accepts only `urn:geohash` or `urn:entity:locality`, and `urn:entity:locality` returned 0 cells for Chicago. Keep the default boundary, which the map draws.
 - **Never commit Qloo response data** (hackathon terms). Caching stays in memory on the server.
 - **Without `QLOO_API_KEY`, the server uses the mock transport** (`qloo.NewMock`). Mock names look like "Mock Artist 07" so they are never mistaken for real data.
   - `QLOO_MOCK_SCENARIO` (`full`, `sparse`, `degraded`, `empty`) serves thin, failing or empty data, to exercise the agent's critic and the UI's degraded paths. Tests use `qloo.NewMockScenario`.
@@ -49,7 +57,8 @@ make docker
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
 - **Map and chart data never go to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
   - `momentum` does the same with `withTrend{model, trend}`: the model gets a start/end/direction summary per artist, and the full series streams as a `trend` event for `MomentumChart.svelte`. Keep `Trend` in `internal/agent/trend.go` and in `types.ts` in sync.
-  - The `/v2/trending` point shape is unverified, so `parseTrend` accepts several field names. Check it against `make probe` output once the key arrives.
+  - `/v2/trending` takes exactly one entity per call, and windows much shorter than 6 months come back empty, so `momentum` asks for 6 months per artist. Points are `{date, population_percentile, population_rank, population_rank_velocity, velocity_fold_change, population_percent_delta}` under `results.trending`.
+  - On the hackathon host every series probed so far is constant (one percentile, zero velocity). `trendSummary` marks those `constant` so the model claims no momentum, and `MomentumChart` notes the lack of movement. Don't pitch "rising momentum" unless the probe shows series that move.
 - **Empty results:** entity tools return `{"results": [], "note": ...}` with a loosening hint, since Qloo fails silently. When nothing survives, the agent submits a memo with an empty headliner, and `MemoView` shows "No confident booking".
 - **Charts:** the series colors are `--series-1`…`--series-5` in `app.css`, in a fixed order where slot 1 is the headliner. They were validated for colorblind separation on `--panel` in both themes, so re-validate before changing them.
 - **Look and feel: the "Console" theme** (a mixing desk).

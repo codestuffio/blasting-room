@@ -48,6 +48,20 @@ func TestTrendSummaryDirection(t *testing.T) {
 	}
 }
 
+// The hackathon host serves the same percentile at every point, with zero
+// velocity; the model must not read that as a plateau.
+func TestTrendSummaryFlagsConstantSeries(t *testing.T) {
+	zero := 0.0
+	flat := []TrendPoint{{Date: "2026-06-11", Percentile: 0.105, Velocity: &zero}, {Date: "2026-06-18", Percentile: 0.105, Velocity: &zero}}
+	if s := trendSummary("a", flat); s["constant"] != true || s["note"] == nil {
+		t.Errorf("constant series summary = %v, want constant and a note", s)
+	}
+	moving := []TrendPoint{{Date: "2026-06-11", Percentile: 0.6}, {Date: "2026-06-18", Percentile: 0.61}}
+	if s := trendSummary("a", moving); s["constant"] != nil {
+		t.Errorf("moving series summary = %v, want no constant flag", s)
+	}
+}
+
 func TestMomentumEmitsTrendAndSummarizesForTheModel(t *testing.T) {
 	fake := &fakeClaude{replies: []string{
 		reply("tool_use", toolUse("m1", "momentum", `{"entity_ids":["mock-artist-01","mock-artist-02"]}`)),
@@ -93,7 +107,7 @@ func TestMomentumEmitsTrendAndSummarizesForTheModel(t *testing.T) {
 func TestEmptyResultsCarryAHint(t *testing.T) {
 	fake := &fakeClaude{replies: []string{
 		reply("tool_use",
-			toolUse("d1", "discover_artists", `{"trend_bias":"high"}`),
+			toolUse("d1", "discover_artists", `{"seed_ids":["mock-artist-01"]}`),
 			toolUse("m1", "momentum", `{"entity_ids":["mock-artist-01"]}`),
 			toolUse("h1", "local_heatmap", `{"entity_id":"mock-artist-01"}`),
 		),
