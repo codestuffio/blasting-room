@@ -232,8 +232,9 @@ func toolset(q *qloo.Client, v Venue) []tool {
 			},
 		},
 		{
-			name:        "compare_audiences",
-			description: "Compare the taste profiles of two groups of artists (e.g. a headliner vs. a candidate support act) to judge audience overlap.",
+			name: "compare_audiences",
+			description: "Compare the taste profiles of two groups of artists (e.g. a headliner vs. a candidate support act) to judge audience overlap. " +
+				"Returns the strongest shared tags with scores, the tags only one side has, and shared entities.",
 			properties: map[string]any{
 				"group_a": arr(str("Artist entity_id")),
 				"group_b": arr(str("Artist entity_id")),
@@ -251,7 +252,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return clip(res, 6000), nil
+				return summarizeCompare(res), nil
 			},
 		},
 		{
@@ -388,6 +389,114 @@ func withUnscored(scored []map[string]any, requested []string) any {
 		return scored
 	}
 	return map[string]any{"results": scored, "no_local_signal": missing}
+}
+
+// compareTag is one tag in a /v2/analysis/compare result. Shared tags carry
+// a score; each also repeats both groups' entities, which is most of the
+// response's size and is dropped here.
+type compareTag struct {
+	Name    string `json:"name"`
+	TagID   string `json:"tag_id"`
+	Subtype string `json:"subtype"`
+	Query   struct {
+		Score *float64 `json:"score"`
+	} `json:"query"`
+}
+
+// kind is the tag family from its URN, e.g. "genre" for urn:tag:genre:music:post_punk.
+func (t compareTag) kind() string {
+	urn := t.Subtype
+	if urn == "" {
+		urn = t.TagID
+	}
+	if parts := strings.Split(urn, ":"); len(parts) > 2 && parts[0] == "urn" && parts[1] == "tag" {
+		return parts[2]
+	}
+	return ""
+}
+
+// Caps on what summarizeCompare keeps, so the result stays well under the
+// size where a raw compare response used to be cut off.
+const (
+	compareSharedMax   = 15
+	compareDistinctMax = 10
+	compareEntitiesMax = 5
+)
+
+// summarizeCompare keeps what the model needs from a compare result: the
+// strongest shared tags with their scores, the tags only one group has (in
+// Qloo's order), and the shared entities. Qloo repeats a tag name across tag
+// subtypes, so repeats are dropped. A result in another shape falls back to a
+// clipped copy.
+func summarizeCompare(raw json.RawMessage) any {
+	var res struct {
+		Tags          []compareTag `json:"tags"`
+		A             []compareTag `json:"a"`
+		B             []compareTag `json:"b"`
+		MatchEntities []struct {
+			Name string `json:"name"`
+		} `json:"matchEntities"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return clip(raw, 6000)
+	}
+	if len(res.Tags)+len(res.A)+len(res.B)+len(res.MatchEntities) == 0 {
+		return map[string]any{"note": "Qloo returned no comparison. Check both groups hold artist entity_ids from resolve_entity."}
+	}
+
+	shared := append([]compareTag(nil), res.Tags...)
+	sort.SliceStable(shared, func(i, j int) bool { return tagScore(shared[i]) > tagScore(shared[j]) })
+	sharedOut := []map[string]any{}
+	seen := map[string]bool{}
+	for _, t := range shared {
+		if len(sharedOut) == compareSharedMax {
+			break
+		}
+		if key := t.kind() + "/" + t.Name; seen[key] {
+			continue
+		} else {
+			seen[key] = true
+		}
+		m := map[string]any{"name": t.Name, "kind": t.kind()}
+		if t.Query.Score != nil {
+			m["score"] = round(*t.Query.Score)
+		}
+		sharedOut = append(sharedOut, m)
+	}
+	distinct := func(tags []compareTag) []string {
+		out := []string{}
+		seen := map[string]bool{}
+		for _, t := range tags {
+			if len(out) == compareDistinctMax {
+				break
+			}
+			if !seen[t.Name] {
+				seen[t.Name] = true
+				out = append(out, t.Name)
+			}
+		}
+		return out
+	}
+	entities := []string{}
+	for _, e := range res.MatchEntities[:min(compareEntitiesMax, len(res.MatchEntities))] {
+		entities = append(entities, e.Name)
+	}
+	return map[string]any{
+		"shared_tags":        sharedOut,
+		"shared_tag_count":   len(res.Tags),
+		"only_group_a":       distinct(res.A),
+		"only_group_a_count": len(res.A),
+		"only_group_b":       distinct(res.B),
+		"only_group_b_count": len(res.B),
+		"shared_entities":    entities,
+	}
+}
+
+func tagScore(t compareTag) float64 {
+	if t.Query.Score == nil {
+		return 0
+	}
+	return *t.Query.Score
 }
 
 func summarizeHeatmap(pts []qloo.HeatmapPoint, lat, lon float64) map[string]any {

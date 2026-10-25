@@ -3,10 +3,12 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -119,5 +121,66 @@ func TestMomentumAsksForSixMonthsPerArtist(t *testing.T) {
 		if days := end.Sub(start).Hours() / 24; days < 180 || days > 186 {
 			t.Errorf("window %s..%s is %.0f days, want about six months", q.Get("filter.start_date"), q.Get("filter.end_date"), days)
 		}
+	}
+}
+
+// Live compare responses repeat both groups' entities on every shared tag and
+// ran past the old 6,000-byte clip; the summary keeps only the top tags.
+func TestCompareAudiencesSummarizesTopTags(t *testing.T) {
+	var tags []string
+	for i := 0; i < 60; i++ {
+		tags = append(tags, fmt.Sprintf(`{"name":"Tag %02d","tag_id":"urn:tag:genre:music:t%02d","subtype":"urn:tag:genre:music","query":{"score":%.3f,`+
+			`"a.signal.interests.entities":[{"entity_id":"a1","name":"Artist A","subtype":"urn:entity:artist","disambiguation":"Artist A"}],`+
+			`"b.signal.interests.entities":[{"entity_id":"b1","name":"Artist B","subtype":"urn:entity:artist","disambiguation":"Artist B"}]}}`, i, i, float64(i)/100))
+	}
+	// A repeated name, as Qloo sends for tags in several subtypes.
+	tags = append(tags, tags[59])
+	only := []string{`{"name":"Only 00","subtype":"urn:tag:genre:music"}`}
+	for i := 0; i < 30; i++ {
+		only = append(only, fmt.Sprintf(`{"name":"Only %02d","subtype":"urn:tag:keyword:media","query":{"count":"1"}}`, i))
+	}
+	body := fmt.Sprintf(`{"results":{"tags":[%s],"a":[%s],"b":[%s],"matchEntities":[{"name":"Shared Bar"}]}}`,
+		strings.Join(tags, ","), strings.Join(only, ","), strings.Join(only[1:4], ","))
+	f := &fakeQloo{body: body}
+
+	out, err := runTool(t, f, "compare_audiences", `{"group_a":["a1"],"group_b":["b1"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(out)
+	if len(body) < 6000 || len(b) > 2500 || strings.Contains(string(b), "truncated") {
+		t.Fatalf("raw %d bytes → summary %d bytes: %s", len(body), len(b), b)
+	}
+	var got struct {
+		Shared []struct {
+			Name  string  `json:"name"`
+			Kind  string  `json:"kind"`
+			Score float64 `json:"score"`
+		} `json:"shared_tags"`
+		SharedCount int      `json:"shared_tag_count"`
+		OnlyA       []string `json:"only_group_a"`
+		OnlyACount  int      `json:"only_group_a_count"`
+		OnlyB       []string `json:"only_group_b"`
+		Entities    []string `json:"shared_entities"`
+	}
+	json.Unmarshal(b, &got)
+	if len(got.Shared) != compareSharedMax || got.Shared[0].Name != "Tag 59" || got.Shared[1].Name != "Tag 58" || got.Shared[0].Score != 0.59 || got.Shared[0].Kind != "genre" || got.SharedCount != 61 {
+		t.Errorf("shared = %+v (count %d), want the %d highest-scored first", got.Shared, got.SharedCount, compareSharedMax)
+	}
+	if len(got.OnlyA) != compareDistinctMax || got.OnlyA[0] != "Only 00" || got.OnlyA[1] != "Only 01" || got.OnlyACount != 31 || len(got.OnlyB) != 3 {
+		t.Errorf("only_a = %v (count %d), only_b = %v", got.OnlyA, got.OnlyACount, got.OnlyB)
+	}
+	if len(got.Entities) != 1 || got.Entities[0] != "Shared Bar" {
+		t.Errorf("shared_entities = %v", got.Entities)
+	}
+}
+
+func TestCompareAudiencesEmptyCarriesANote(t *testing.T) {
+	out, err := runTool(t, &fakeQloo{body: `{"results":{"tags":[],"a":[],"b":[],"matchEntities":[]}}`}, "compare_audiences", `{"group_a":["a1"],"group_b":["b1"]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m, ok := out.(map[string]any); !ok || m["note"] == nil {
+		t.Fatalf("result = %#v, want a note", out)
 	}
 }

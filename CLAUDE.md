@@ -41,6 +41,7 @@ make docker
     - `filter.tags` returns nothing for artists, whatever the tag format. Pass genres as `signal.interests.tags`. `bias.trends` has no visible effect.
     - Mid-size touring acts sit at popularity 0.80–0.93, so `filter.popularity.max=0.9` is the mid-tier cut.
     - A ranking (`filter.results.entities`) with a location signal silently drops artists Qloo has no local data on. `score_shortlist` reports them as `no_local_signal`. Explainability is only filled in when seeds are passed.
+    - A `/v2/analysis/compare` response for two artists is about 44 KB, mostly because every shared tag repeats both groups' entities. `compare_audiences` sends the model `summarizeCompare` (the top shared tags with scores, plus the tags only one side has) instead of the raw response.
     - `output.heatmap.boundary` accepts only `urn:geohash` or `urn:entity:locality`, and `urn:entity:locality` returned 0 cells for Chicago. Keep the default boundary, which the map draws.
 - **Never commit Qloo response data** (hackathon terms). Caching stays in memory on the server.
 - **Without `QLOO_API_KEY`, the server uses the mock transport** (`qloo.NewMock`). Mock names look like "Mock Artist 07" so they are never mistaken for real data.
