@@ -59,6 +59,7 @@ make docker
 - **Changing tools or the memo:**
   - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`.
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
+  - **Provenance:** `runTools` gives each call a run-local ref (`Q1`, `Q2`, …), streamed on `tool_call` and prefixed to the result as a `ref Qn` line. Memo evidence cites the ref, and `checkMemo` clears any ref that names no call of the cited tool. The evidence trail links each ref to its row in the trace (`#call-Qn`).
 - **Map and chart data never go to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
   - `momentum` does the same with `withTrend{model, trend}`: the model gets a start/end/direction summary per artist, and the full series streams as a `trend` event for `MomentumChart.svelte`. Keep `Trend` in `internal/agent/trend.go` and in `types.ts` in sync.
   - `/v2/trending` takes exactly one entity per call, and windows much shorter than 6 months come back empty, so `momentum` asks for 6 months per artist. Points are `{date, population_percentile, population_rank, population_rank_velocity, velocity_fold_change, population_percent_delta}` under `results.trending`.

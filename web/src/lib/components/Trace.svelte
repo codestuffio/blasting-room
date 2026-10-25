@@ -51,8 +51,8 @@
 	{#each events as e, i (i)}
 		{#if e.type === 'tool_call'}
 			{@const r = results.get(e.data.id)}
-			<li class="row call">
-				<span class="time">{clock(e.at)}</span>
+			<li class="row call" id={e.data.ref ? `call-${e.data.ref}` : undefined}>
+				<span class="time">{clock(e.at)}<span class="ref">{e.data.ref}</span></span>
 				<span class="led" class:ok={r?.ok} class:bad={r && !r.ok} class:live={!r && running}></span>
 				<div class="main">
 					<strong>{labels[e.data.name] ?? e.data.name}</strong>
@@ -137,6 +137,18 @@
 	}
 	.call:has(.tag.live) {
 		background: color-mix(in srgb, var(--accent) 7%, transparent);
+	}
+	/* The memo's evidence trail links here. */
+	.call {
+		scroll-margin-top: 1rem;
+	}
+	.call:target {
+		background: color-mix(in srgb, var(--accent) 14%, transparent);
+		box-shadow: inset 3px 0 0 var(--accent);
+	}
+	.ref {
+		display: block;
+		color: var(--accent-text);
 	}
 	.time {
 		font-family: var(--font-mono);

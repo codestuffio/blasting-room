@@ -1,11 +1,17 @@
 <script lang="ts">
 	import { flushSync } from 'svelte';
-	import type { Geo, Memo, Trend, Venue } from '#lib/types.ts';
+	import type { Geo, Memo, Mode, Trend, Venue } from '#lib/types.ts';
 	import VenueMap from '#lib/components/VenueMap.svelte';
 	import VuMeter from '#lib/components/VuMeter.svelte';
 	import MomentumChart from '#lib/components/MomentumChart.svelte';
 
-	let { memo, venue, geo = [], trends = [] }: { memo: Memo; venue: Venue; geo?: Geo[]; trends?: Trend[] } = $props();
+	let {
+		memo,
+		venue,
+		mode = 'fill_date',
+		geo = [],
+		trends = []
+	}: { memo: Memo; venue: Venue; mode?: Mode; geo?: Geo[]; trends?: Trend[] } = $props();
 
 	// When no candidate survives the agent's checks, it submits a memo with an empty headliner.
 	let hasPick = $derived(memo.headliner.name.trim() !== '');
@@ -14,7 +20,8 @@
 	);
 	let picks = $derived(
 		[
-			{ role: 'Headliner', pick: memo.headliner },
+			// When vetting, the headliner is the act that was offered, whether or not the verdict is to book it.
+			{ role: mode === 'vet_offer' ? 'Offered act' : 'Headliner', pick: memo.headliner },
 			{ role: 'Support', pick: memo.support }
 		].filter((p) => p.pick.name.trim() !== '')
 	);
@@ -36,6 +43,9 @@
 	);
 	let partnerNames = $derived(memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name));
 
+	let linked = $derived(memo.evidence.filter((ev) => ev.ref).length);
+
+	const verdictLabel = { book: 'Book it', book_with_changes: 'Book with changes', pass: 'Pass' };
 	const kindLabel = { place: 'Nearby spot', podcast: 'Podcast', brand: 'Brand' };
 	const needle = { low: 0.2, medium: 0.55, high: 0.9 };
 	const tiers = ['budget', 'standard', 'premium'] as const;
@@ -77,7 +87,10 @@
 <article class="memo">
 	<header class="head">
 		<div>
-			<p class="eyebrow">Booking memo · {venue.name}, {venue.neighborhood}</p>
+			<p class="eyebrow">{mode === 'vet_offer' ? 'Offer review' : 'Booking memo'} · {venue.name}, {venue.neighborhood}</p>
+			{#if memo.verdict}
+				<p class="verdict {memo.verdict}"><span class="led" class:ok={memo.verdict === 'book'} class:on={memo.verdict === 'book_with_changes'} class:bad={memo.verdict === 'pass'}></span>{verdictLabel[memo.verdict]}</p>
+			{/if}
 			{#if hasPick && memo.support.name}
 				<h2>{memo.headliner.name} <span class="with">with</span> {memo.support.name}</h2>
 			{:else}
@@ -183,12 +196,24 @@
 
 	{#if memo.evidence.length}
 		<details bind:open={evidenceOpen}>
-			<summary>Evidence trail ({memo.evidence.length} claims)</summary>
+			<summary>
+				Evidence trail ({memo.evidence.length} claims{linked < memo.evidence.length ? `, ${linked} traced to a call` : ''})
+			</summary>
 			<table>
-				<thead><tr><th>Claim</th><th>Source tool</th></tr></thead>
+				<thead><tr><th>Claim</th><th>Source tool</th><th>Call</th></tr></thead>
 				<tbody>
 					{#each memo.evidence as ev, i (i)}
-						<tr><td>{ev.claim}</td><td><code>{ev.tool}</code></td></tr>
+						<tr>
+							<td>{ev.claim}</td>
+							<td><code>{ev.tool}</code></td>
+							<td>
+								{#if ev.ref}
+									<a class="ref" href={`#call-${ev.ref}`} title="Show this call in the run of show">{ev.ref}</a>
+								{:else}
+									<span class="muted" title="The agent cited no call of this tool">—</span>
+								{/if}
+							</td>
+						</tr>
 					{/each}
 				</tbody>
 			</table>
@@ -232,6 +257,28 @@
 		font-size: 0.75rem;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
+	}
+	.verdict {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.55rem;
+		margin: 0.6rem 0 0;
+		padding: 0.3rem 0.7rem;
+		border: 1px solid currentColor;
+		border-radius: 6px;
+		font-family: var(--font-display);
+		font-size: 0.8rem;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+	.verdict.book {
+		color: var(--ok);
+	}
+	.verdict.book_with_changes {
+		color: var(--accent-text);
+	}
+	.verdict.pass {
+		color: var(--bad);
 	}
 	h2 {
 		margin: 0.4rem 0 0.6rem;
@@ -371,9 +418,15 @@
 		font-family: var(--font-mono);
 		font-size: 0.85rem;
 	}
-	td code {
+	td code,
+	a.ref {
 		font-family: var(--font-mono);
 		color: var(--accent-text);
+	}
+	a.ref {
+		display: inline-block;
+		min-width: 2.75rem;
+		padding: 0.15rem 0;
 	}
 	table {
 		width: 100%;
@@ -399,8 +452,13 @@
 		.download {
 			display: none;
 		}
-		.tiers {
+		.tiers,
+		.verdict {
 			print-color-adjust: exact;
+		}
+		/* The trace isn't printed, so refs are plain labels on paper. */
+		a.ref {
+			text-decoration: none;
 		}
 		section,
 		.picks > div,

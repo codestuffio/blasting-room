@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -38,6 +39,7 @@ func (f *fakeClaude) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 const memoInput = `{
+  "verdict": "book",
   "summary": "Book Mock Artist 01 with Mock Artist 02.",
   "confidence": "low",
   "headliner": {"name": "Mock Artist 01", "entity_id": "mock-artist-01", "rationale": ["high local affinity"]},
@@ -47,7 +49,12 @@ const memoInput = `{
   "co_promo": [{"kind": "podcast", "name": "Mock Podcast 03", "idea": "ad read"}],
   "risks": ["synthetic data"],
   "alternates": [],
-  "evidence": [{"claim": "high local affinity", "tool": "discover_artists"}]
+  "evidence": [
+    {"claim": "high local affinity", "tool": "discover_artists", "ref": "q1"},
+    {"claim": "fans cluster nearby", "tool": "local_heatmap", "ref": "Q2"},
+    {"claim": "wrong tool for the ref", "tool": "momentum", "ref": "Q1"},
+    {"claim": "ref that names no call", "tool": "discover_artists", "ref": "Q9"}
+  ]
 }`
 
 func reply(stop string, content ...string) string {
@@ -99,13 +106,28 @@ func TestRunLoopsThroughToolsToMemo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if memo.Headliner.EntityID != "mock-artist-01" || memo.Audience.TicketTier != "standard" {
+	if memo.Headliner.EntityID != "mock-artist-01" || memo.Audience.TicketTier != "standard" || memo.Verdict != "book" {
 		t.Fatalf("memo = %+v", memo)
+	}
+	// Only refs that name a call of the cited tool survive.
+	var gotRefs []string
+	for _, ev := range memo.Evidence {
+		gotRefs = append(gotRefs, ev.Ref)
+	}
+	if strings.Join(gotRefs, ",") != "Q1,Q2,," {
+		t.Fatalf("evidence refs = %q", gotRefs)
 	}
 
 	counts := map[string]int{}
+	callRefs := map[string]string{}
 	for _, e := range events {
 		counts[e.Type]++
+		if c, ok := e.Data.(ToolCall); ok {
+			callRefs[c.ID] = c.Ref
+		}
+	}
+	if callRefs["t1"] != "Q1" || callRefs["t2"] != "Q2" {
+		t.Fatalf("call refs = %v", callRefs)
 	}
 	if counts["tool_call"] != 2 || counts["tool_result"] != 2 || counts["memo"] != 1 || counts["done"] != 1 {
 		t.Fatalf("event counts = %v", counts)
@@ -125,6 +147,11 @@ func TestRunLoopsThroughToolsToMemo(t *testing.T) {
 		b := blocks[i].(map[string]any)
 		if b["type"] != "tool_result" || b["tool_use_id"] != id || b["is_error"] == true {
 			t.Fatalf("block %d = %v", i, b)
+		}
+		// The model reads each result's ref so it can cite the call.
+		text := b["content"].([]any)[0].(map[string]any)["text"].(string)
+		if want := fmt.Sprintf("ref Q%d\n", i+1); !strings.HasPrefix(text, want) || !json.Valid([]byte(text[len(want):])) {
+			t.Fatalf("block %d = %q, want %q then JSON", i, text[:min(len(text), 40)], want)
 		}
 	}
 	first := fake.requests[0]
@@ -235,5 +262,18 @@ func TestMapToolsEmitGeoButKeepModelResultsCompact(t *testing.T) {
 	heatResult := blocks[0].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
 	if !strings.Contains(heatResult, "venue_percentile") || strings.Count(heatResult, `"lat"`) > 5 {
 		t.Fatalf("heatmap result is not the compact summary: %s", heatResult)
+	}
+}
+
+func TestMemoWithoutHeadlinerIsAPass(t *testing.T) {
+	m := Memo{Verdict: "book"}
+	checkMemo(&m, nil)
+	if m.Verdict != "pass" {
+		t.Fatalf("verdict = %q", m.Verdict)
+	}
+	m = Memo{Verdict: "book_with_changes", Headliner: Pick{Name: "Mock Artist 01"}}
+	checkMemo(&m, nil)
+	if m.Verdict != "book_with_changes" {
+		t.Fatalf("verdict = %q", m.Verdict)
 	}
 }

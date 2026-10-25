@@ -23,6 +23,8 @@
 	};
 
 	let events = $state<TraceEvent[]>([]);
+	// The mode of the run on screen, which the form may have moved on from.
+	let runMode = $state<Mode>('fill_date');
 	let memo = $state<Memo | null>(null);
 	let running = $state(false);
 	let error = $state('');
@@ -49,6 +51,7 @@
 		if (!canRun) return;
 		events = [];
 		memo = null;
+		runMode = mode;
 		error = '';
 		running = true;
 		controller = new AbortController();
@@ -162,7 +165,7 @@
 			</section>
 			<section class="memo-col">
 				{#if memo && venue}
-					<MemoView {memo} {venue} {geo} {trends} />
+					<MemoView {memo} {venue} {geo} {trends} mode={runMode} />
 				{:else}
 					{#if venue && geo.length}
 						<VenueMap {venue} {geo} />
