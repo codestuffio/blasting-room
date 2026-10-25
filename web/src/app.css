@@ -17,6 +17,12 @@
 	--led-off: #3a3530;
 	--face: #f6e2ae;
 	--face-ink: #1a1206;
+	/* Chart series, in fixed order: slot 1 is the headliner. Validated for CVD separation on --panel. */
+	--series-1: #c98500;
+	--series-2: #3987e5;
+	--series-3: #199e70;
+	--series-4: #9085e9;
+	--series-5: #d55181;
 
 	--font-display: 'Michroma', ui-sans-serif, system-ui, sans-serif;
 	--font-body: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -40,6 +46,11 @@
 		--ok: #1f7a4a;
 		--bad: #c42839;
 		--led-off: #cfc5b3;
+		--series-1: #a86a00;
+		--series-2: #2a78d6;
+		--series-3: #1baf7a;
+		--series-4: #6250d6;
+		--series-5: #e87ba4;
 	}
 }
 

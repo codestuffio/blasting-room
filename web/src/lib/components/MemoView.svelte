@@ -1,10 +1,33 @@
 <script lang="ts">
 	import { flushSync } from 'svelte';
-	import type { Geo, Memo, Venue } from '#lib/types.ts';
+	import type { Geo, Memo, Trend, Venue } from '#lib/types.ts';
 	import VenueMap from '#lib/components/VenueMap.svelte';
 	import VuMeter from '#lib/components/VuMeter.svelte';
+	import MomentumChart from '#lib/components/MomentumChart.svelte';
 
-	let { memo, venue, geo = [] }: { memo: Memo; venue: Venue; geo?: Geo[] } = $props();
+	let { memo, venue, geo = [], trends = [] }: { memo: Memo; venue: Venue; geo?: Geo[]; trends?: Trend[] } = $props();
+
+	// When no candidate survives the agent's checks, it submits a memo with an empty headliner.
+	let hasPick = $derived(memo.headliner.name.trim() !== '');
+	let title = $derived(
+		!hasPick ? 'No confident booking' : memo.support.name ? `${memo.headliner.name} with ${memo.support.name}` : memo.headliner.name
+	);
+	let picks = $derived(
+		[
+			{ role: 'Headliner', pick: memo.headliner },
+			{ role: 'Support', pick: memo.support }
+		].filter((p) => p.pick.name.trim() !== '')
+	);
+	let chartPicks = $derived(
+		[
+			{ ...memo.headliner, role: 'Headliner' },
+			{ ...memo.support, role: 'Support' },
+			...memo.alternates.map((a) => ({ ...a, role: 'Alternate' }))
+		].filter((p) => p.entity_id)
+	);
+	let hasTrend = $derived(
+		trends.some((t) => t.series.some((s) => s.points.length > 1 && chartPicks.some((p) => p.entity_id === s.entity_id)))
+	);
 
 	let names = $derived(
 		Object.fromEntries(
@@ -36,7 +59,7 @@
 
 	function beforePrint() {
 		saved = { title: document.title, open: evidenceOpen };
-		document.title = `Booking memo - ${memo.headliner.name} with ${memo.support.name} - ${venue.name}`;
+		document.title = `Booking memo - ${title} - ${venue.name}`;
 		evidenceOpen = true;
 		flushSync();
 	}
@@ -55,7 +78,11 @@
 	<header class="head">
 		<div>
 			<p class="eyebrow">Booking memo · {venue.name}, {venue.neighborhood}</p>
-			<h2>{memo.headliner.name} <span class="with">with</span> {memo.support.name}</h2>
+			{#if hasPick && memo.support.name}
+				<h2>{memo.headliner.name} <span class="with">with</span> {memo.support.name}</h2>
+			{:else}
+				<h2>{title}</h2>
+			{/if}
 			<p class="summary">{memo.summary}</p>
 			<button type="button" class="download" onclick={download} disabled={preparing}>
 				{preparing ? 'Preparing…' : 'Download PDF'}
@@ -67,8 +94,9 @@
 		</div>
 	</header>
 
+	{#if picks.length}
 	<section class="picks">
-		{#each [{ role: 'Headliner', pick: memo.headliner }, { role: 'Support', pick: memo.support }] as p (p.role)}
+		{#each picks as p (p.role)}
 			<div>
 				<span class="tape">{p.role}</span>
 				<h3 class="pick">{p.pick.name}</h3>
@@ -78,6 +106,7 @@
 			</div>
 		{/each}
 	</section>
+	{/if}
 
 	{#if geo.length}
 		<section>
@@ -86,15 +115,25 @@
 		</section>
 	{/if}
 
-	<section class="grid">
-		<div>
-			<h3>Why it works in this room</h3>
-			<p>{memo.local_fit}</p>
-		</div>
-		<div>
+	{#if hasTrend}
+		<section class="momentum">
 			<h3>Momentum</h3>
 			<p>{memo.momentum}</p>
+			<MomentumChart {trends} picks={chartPicks} />
+		</section>
+	{/if}
+
+	<section class="grid">
+		<div>
+			<h3>{hasPick ? 'Why it works in this room' : 'Local fit'}</h3>
+			<p>{memo.local_fit}</p>
 		</div>
+		{#if !hasTrend}
+			<div>
+				<h3>Momentum</h3>
+				<p>{memo.momentum}</p>
+			</div>
+		{/if}
 		<div>
 			<h3>Who's coming</h3>
 			<p>{memo.audience.summary}</p>
@@ -239,6 +278,8 @@
 	}
 	.tiers {
 		display: inline-flex;
+		flex-wrap: wrap;
+		max-width: 100%;
 		gap: 4px;
 		padding: 4px;
 		background: var(--recess);
@@ -290,8 +331,13 @@
 		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
 		gap: 1rem;
 	}
+	.momentum {
+		display: grid;
+		gap: 0.5rem;
+	}
 	.picks > div,
-	.grid > div {
+	.grid > div,
+	.momentum {
 		padding: 0.9rem 1rem;
 		border: 1px solid var(--line);
 		border-radius: 12px;

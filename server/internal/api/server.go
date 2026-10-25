@@ -22,10 +22,11 @@ type Runner interface {
 }
 
 type Server struct {
-	Runner    Runner // nil when ANTHROPIC_API_KEY is not configured
-	QlooMock  bool
-	StaticDir string
-	Log       *slog.Logger
+	Runner       Runner // nil when ANTHROPIC_API_KEY is not configured
+	QlooMock     bool
+	MockScenario string // full | sparse | degraded | empty, when QlooMock
+	StaticDir    string
+	Log          *slog.Logger
 
 	slots   chan struct{} // caps concurrent agent runs
 	limiter *ipLimiter
@@ -47,11 +48,15 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
+	body := map[string]any{
 		"ok":          true,
 		"agent_ready": s.Runner != nil,
 		"qloo_mode":   map[bool]string{true: "mock", false: "live"}[s.QlooMock],
-	})
+	}
+	if s.QlooMock {
+		body["mock_scenario"] = s.MockScenario
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 func (s *Server) venues(w http.ResponseWriter, _ *http.Request) {

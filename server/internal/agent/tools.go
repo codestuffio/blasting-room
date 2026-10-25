@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"blastingroom/internal/qloo"
@@ -48,7 +49,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return compactEntities(ents), nil
+				return entitiesOrNote(ents, "Try a shorter or differently spelled name, or another entity_type."), nil
 			},
 		},
 		{
@@ -105,7 +106,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return compactEntities(res.Entities), nil
+				return entitiesOrNote(res.Entities, "Try fewer genre tags, a higher popularity_max, or no trend_bias."), nil
 			},
 		},
 		{
@@ -138,7 +139,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
-				return compactEntities(res.Entities), nil
+				return entitiesOrNote(res.Entities, "Check the candidate_ids came from resolve_entity or discover_artists; drop seed_ids and retry."), nil
 			},
 		},
 		{
@@ -178,12 +179,47 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if len(in.EntityIDs) > 5 {
 					in.EntityIDs = in.EntityIDs[:5]
 				}
+				// One request per artist, so each series is attributable to its artist
+				// whatever shape a batched response takes.
 				end := time.Now()
-				res, err := q.Trending(ctx, qloo.TypeArtist, in.EntityIDs, end.AddDate(0, 0, -90), end)
-				if err != nil {
-					return nil, err
+				raws := make([]json.RawMessage, len(in.EntityIDs))
+				errs := make([]error, len(in.EntityIDs))
+				var wg sync.WaitGroup
+				for i, id := range in.EntityIDs {
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						raws[i], errs[i] = q.Trending(ctx, qloo.TypeArtist, []string{id}, end.AddDate(0, 0, -90), end)
+					}()
 				}
-				return clip(res, 6000), nil
+				wg.Wait()
+
+				summaries := make([]any, 0, len(in.EntityIDs))
+				trend := &Trend{}
+				failed := 0
+				for i, id := range in.EntityIDs {
+					if errs[i] != nil {
+						failed++
+						summaries = append(summaries, map[string]any{"entity_id": id, "error": errs[i].Error()})
+						continue
+					}
+					pts := parseTrend(raws[i])
+					s := trendSummary(id, pts)
+					if len(pts) == 0 && !isEmptyJSON(raws[i]) {
+						s["unparsed"] = clip(raws[i], 1500) // a shape parseTrend does not know yet
+					}
+					summaries = append(summaries, s)
+					if len(pts) > 0 {
+						trend.Series = append(trend.Series, TrendSeries{EntityID: id, Points: pts})
+					}
+				}
+				if failed == len(in.EntityIDs) {
+					return nil, errs[0]
+				}
+				if len(trend.Series) == 0 {
+					trend = nil
+				}
+				return withTrend{summaries, trend}, nil
 			},
 		},
 		{
@@ -259,10 +295,12 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				if err != nil {
 					return nil, err
 				}
+				hint := "Try fewer or different entity_ids."
 				if in.Kind != "place" {
-					return compactEntities(res.Entities), nil
+					return entitiesOrNote(res.Entities, hint), nil
 				}
-				return withGeo{compactEntities(res.Entities), placesGeo(v, in.EntityIDs, res.Entities)}, nil
+				hint += " Nothing matched within 3 km of the venue."
+				return withGeo{entitiesOrNote(res.Entities, hint), placesGeo(v, in.EntityIDs, res.Entities)}, nil
 			},
 		},
 		{
@@ -356,8 +394,25 @@ func summarizeHeatmap(pts []qloo.HeatmapPoint, lat, lon float64) map[string]any 
 	}
 }
 
+// entitiesOrNote returns compact entities, or a note with a hint when Qloo
+// returned none: invalid or over-narrow parameters fail silently that way.
+func entitiesOrNote(ents []qloo.Entity, hint string) any {
+	if len(ents) == 0 {
+		return map[string]any{"results": []any{}, "note": "Qloo returned no results. " + hint}
+	}
+	return compactEntities(ents)
+}
+
+func isEmptyJSON(raw json.RawMessage) bool {
+	switch strings.TrimSpace(string(raw)) {
+	case "", "null", "[]", "{}":
+		return true
+	}
+	return false
+}
+
 func clip(raw json.RawMessage, n int) any {
-	if len(raw) == 0 {
+	if isEmptyJSON(raw) {
 		return map[string]any{"note": "empty result"}
 	}
 	if len(raw) <= n {

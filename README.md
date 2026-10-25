@@ -24,7 +24,7 @@ A Go tool-use loop on Claude drives a set of Qloo tools:
 | `discover_artists` | `/v2/insights` (artist, location signal) | acts whose fans over-index near the venue |
 | `score_shortlist` | `/v2/insights` (`filter.results.entities`, explainability) | rank candidates, with reasons |
 | `local_heatmap` | `/v2/insights` (`urn:heatmap`) | where the fan base clusters vs. the venue |
-| `momentum` | `/v2/trending` | 90-day popularity velocity |
+| `momentum` | `/v2/trending` | 90-day popularity trend, drawn as the memo's momentum chart |
 | `compare_audiences` | `/v2/analysis/compare` | headliner/support overlap |
 | `audience_demographics` | `/v2/insights` (`urn:demographics`) | age/gender skew → ticket tier |
 | `co_promo_partners` | `/v2/insights` (cross-domain place/podcast/brand) | nearby bars, podcasts, sponsors |
@@ -69,6 +69,7 @@ That runs `go vet`, the Go tests and `svelte-check`.
 | `ANTHROPIC_API_KEY` | — | Required for agent runs; without it the UI loads but runs are disabled |
 | `QLOO_API_KEY` | — | Empty = synthetic mock data |
 | `QLOO_BASE_URL` | `https://hackathon.api.qloo.com` | Hackathon keys only work on this host |
+| `QLOO_MOCK_SCENARIO` | `full` | Mock only. `sparse`: short lists, many artists missing heatmap/trend/demographics. `degraded`: heatmap down, some calls fail with 503. `empty`: every call returns nothing, like Qloo's silent failures |
 | `BR_MODEL` | `claude-opus-5-5` | |
 | `BR_EFFORT` | `medium` | `low` / `medium` / `high` / `xhigh` / `max` |
 | `BR_MAX_TURNS` | `20` | Upper bound on agent turns per run |

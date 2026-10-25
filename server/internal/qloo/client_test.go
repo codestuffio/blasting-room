@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestInsightsSendsKeyAndParams(t *testing.T) {
@@ -154,5 +155,41 @@ func TestRawReturnsWholeBody(t *testing.T) {
 	}
 	if err := json.Unmarshal(raw, &body); err != nil || len(body.Results.Tags) == 0 {
 		t.Fatalf("raw = %s, err = %v", raw, err)
+	}
+}
+
+func TestTransientFailuresAreRetriedOnce(t *testing.T) {
+	for name, tc := range map[string]struct {
+		statuses []int // response per attempt; the last repeats
+		wantErr  bool
+		calls    int32
+	}{
+		"503 then ok":     {[]int{503, 200}, false, 2},
+		"429 then ok":     {[]int{429, 200}, false, 2},
+		"503 twice":       {[]int{503}, true, 2},
+		"400 not retried": {[]int{400}, true, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var calls atomic.Int32
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				n := int(calls.Add(1))
+				status := tc.statuses[min(n, len(tc.statuses))-1]
+				if status != 200 {
+					http.Error(w, `{"error":"nope"}`, status)
+					return
+				}
+				w.Write([]byte(`{"results":[{"entity_id":"e1","name":"A"}]}`))
+			}))
+			defer srv.Close()
+
+			c := New("k", WithBaseURL(srv.URL), WithRetryWait(time.Millisecond))
+			ents, err := c.Search(context.Background(), "A", nil, 1)
+			if (err != nil) != tc.wantErr || !tc.wantErr && len(ents) != 1 {
+				t.Fatalf("err = %v, ents = %v", err, ents)
+			}
+			if n := calls.Load(); n != tc.calls {
+				t.Fatalf("calls = %d, want %d", n, tc.calls)
+			}
+		})
 	}
 }

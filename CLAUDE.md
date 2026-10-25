@@ -37,6 +37,8 @@ make docker
   - Invalid parameters fail silently: you get an empty result, not an error.
 - **Never commit Qloo response data** (hackathon terms). Caching stays in memory on the server.
 - **Without `QLOO_API_KEY`, the server uses the mock transport** (`qloo.NewMock`). Mock names look like "Mock Artist 07" so they are never mistaken for real data.
+  - `QLOO_MOCK_SCENARIO` (`full`, `sparse`, `degraded`, `empty`) serves thin, failing or empty data, to exercise the agent's critic and the UI's degraded paths. Tests use `qloo.NewMockScenario`.
+  - The client retries a 429, 502, 503 or 504 (or no response) once.
 - **Claude:**
   - Model `claude-opus-5-5` with adaptive thinking (`display: updates`, which streams progress notes) and an explicit effort setting.
   - Server-side refusal fallback is on: `fallbacks: "default"`.
@@ -45,7 +47,11 @@ make docker
 - **Changing tools or the memo:**
   - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`.
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
-- **Map data never goes to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
+- **Map and chart data never go to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
+  - `momentum` does the same with `withTrend{model, trend}`: the model gets a start/end/direction summary per artist, and the full series streams as a `trend` event for `MomentumChart.svelte`. Keep `Trend` in `internal/agent/trend.go` and in `types.ts` in sync.
+  - The `/v2/trending` point shape is unverified, so `parseTrend` accepts several field names. Check it against `make probe` output once the key arrives.
+- **Empty results:** entity tools return `{"results": [], "note": ...}` with a loosening hint, since Qloo fails silently. When nothing survives, the agent submits a memo with an empty headliner, and `MemoView` shows "No confident booking".
+- **Charts:** the series colors are `--series-1`…`--series-5` in `app.css`, in a fixed order where slot 1 is the headliner. They were validated for colorblind separation on `--panel` in both themes, so re-validate before changing them.
 - **Look and feel: the "Console" theme** (a mixing desk).
   - Color and font tokens live in `web/src/app.css`, with a dark default and a "daylight" light variant. Use `--accent` for fills and `--accent-text` for amber text, since amber text fails contrast on the light background.
   - Shared global classes: `.led` (status light: `.on`, `.ok`, `.bad`, `.live`), `.tape` (channel label) and `.label` (mono section label).
