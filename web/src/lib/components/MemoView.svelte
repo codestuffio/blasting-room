@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { flushSync } from 'svelte';
-	import type { Geo, Memo, Mode, Trend, Venue } from '#lib/types.ts';
+	import type { Geo, Memo, Mode, Route, RouteFit, Trend, Venue } from '#lib/types.ts';
+	import DealCard from '#lib/components/DealCard.svelte';
+	import RouteChart from '#lib/components/RouteChart.svelte';
 	import VenueMap from '#lib/components/VenueMap.svelte';
 	import VuMeter from '#lib/components/VuMeter.svelte';
 	import MomentumChart from '#lib/components/MomentumChart.svelte';
@@ -9,9 +11,40 @@
 		memo,
 		venue,
 		mode = 'fill_date',
+		date = '',
 		geo = [],
-		trends = []
-	}: { memo: Memo; venue: Venue; mode?: Mode; geo?: Geo[]; trends?: Trend[] } = $props();
+		trends = [],
+		routes = []
+	}: { memo: Memo; venue: Venue; mode?: Mode; date?: string; geo?: Geo[]; trends?: Trend[]; routes?: Route[] } = $props();
+
+	// The headliner's tour: matched by Qloo id, else by name; the latest lookup wins.
+	let route = $derived(
+		routes.findLast(
+			(r) =>
+				(r.entity_id && r.entity_id === memo.headliner.entity_id) ||
+				r.artist.toLowerCase() === memo.headliner.name.trim().toLowerCase()
+		)
+	);
+	let showDeal = $derived(!!memo.deal && (memo.deal.guarantee > 0 || memo.deal.ticket_price_advance > 0));
+	let routing = $derived(memo.routing);
+	const fitLabel: Record<RouteFit, string> = {
+		on_the_way: 'On the way',
+		detour: 'Detour',
+		off_route: 'Off route',
+		already_in_market: 'Already in market',
+		already_booked: 'Booked elsewhere that night',
+		no_tour_data: 'No tour data',
+		not_checked: 'Not checked'
+	};
+	const fitLed: Record<RouteFit, string> = {
+		on_the_way: 'ok',
+		detour: 'on',
+		off_route: '',
+		already_in_market: 'bad',
+		already_booked: 'bad',
+		no_tour_data: '',
+		not_checked: ''
+	};
 
 	// When no candidate survives the agent's checks, it submits a memo with an empty headliner.
 	let hasPick = $derived(memo.headliner.name.trim() !== '');
@@ -125,6 +158,26 @@
 			</div>
 		{/each}
 	</section>
+	{/if}
+
+	{#if showDeal}
+		<DealCard deal={memo.deal} {venue} headliner={memo.headliner.name} support={memo.support.name} {date} />
+	{:else if memo.deal?.walk_away}
+		<section class="no-offer">
+			<span class="tape">No offer</span>
+			<p><span class="label">What would change it</span> {memo.deal.walk_away}</p>
+		</section>
+	{/if}
+
+	{#if hasPick && routing && routing.fit !== 'not_checked'}
+		<section class="routing">
+			<div class="routing-head">
+				<h3>Where they'll be</h3>
+				<span class="fit"><span class={`led ${fitLed[routing.fit]}`}></span>{fitLabel[routing.fit]}</span>
+			</div>
+			<p>{routing.summary}</p>
+			{#if route}<RouteChart {route} {date} />{/if}
+		</section>
 	{/if}
 
 	{#if geo.length}
@@ -426,6 +479,47 @@
 	.partners li span:last-child {
 		grid-column: 2;
 		color: var(--muted);
+	}
+	.no-offer {
+		display: grid;
+		justify-items: start;
+		gap: 0.6rem;
+		padding: 0.9rem 1rem;
+		border: 1px dashed var(--line);
+		border-radius: 12px;
+	}
+	.no-offer p {
+		margin: 0;
+	}
+	.no-offer .label {
+		margin-right: 0.4rem;
+	}
+	.routing {
+		display: grid;
+		gap: 0.5rem;
+		padding: 0.9rem 1rem;
+		border: 1px solid var(--line);
+		border-radius: 12px;
+		background: var(--panel);
+	}
+	.routing h3 {
+		margin: 0;
+	}
+	.routing-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+	}
+	.fit {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
 	}
 	.clashes {
 		list-style: none;

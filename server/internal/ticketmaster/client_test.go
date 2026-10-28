@@ -112,3 +112,70 @@ func TestGeohash(t *testing.T) {
 		t.Fatalf("geohash = %s", got)
 	}
 }
+
+func TestFindArtistNeedsAnExactName(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/attractions.json" || !strings.HasPrefix(r.URL.Query().Get("keyword"), "Mock ") {
+			t.Errorf("request = %s", r.URL)
+		}
+		io.WriteString(w, `{"_embedded":{"attractions":[
+			{"id":"a13","name":"Mock Day 13","upcomingEvents":{"_total":9}},
+			{"id":"a1","name":"mock day","upcomingEvents":{"_total":17}}]}}`)
+	}))
+	defer srv.Close()
+	c := New("k", WithBaseURL(srv.URL), WithRequestGap(0))
+	a, err := c.FindArtist(context.Background(), "Mock Day")
+	if err != nil || a == nil || a.ID != "a1" || a.Upcoming != 17 {
+		t.Fatalf("attraction = %+v, %v", a, err)
+	}
+	if a, _ := c.FindArtist(context.Background(), "Mock Night"); a != nil {
+		t.Fatalf("loose match returned %+v", a)
+	}
+}
+
+func TestArtistShowsDropsDoubleListings(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("attractionId") != "a1" || r.URL.Query().Get("locale") != "*" {
+			t.Errorf("request = %s", r.URL)
+		}
+		venue := func(name, city, state string) string {
+			return `{"_embedded":{"venues":[{"name":"` + name + `","city":{"name":"` + city + `"},"state":{"stateCode":"` + state + `"},"country":{"countryCode":"US"},"location":{"latitude":"30.26","longitude":"-97.74"}}]}`
+		}
+		io.WriteString(w, `{"_embedded":{"events":[
+			{"id":"1","name":"Mock Day","dates":{"start":{"localDate":"2026-11-14"}},`+venue("Mock Hall", "Austin", "TX")[1:]+`},
+			{"id":"2","name":"Mock Day (late)","dates":{"start":{"localDate":"2026-11-14"}},`+venue("Mock Hall Late", "Austin", "TX")[1:]+`},
+			{"id":"3","name":"Mock Day","dates":{"start":{"localDate":"2026-11-16"}},`+venue("Mock Theater", "Oklahoma City", "OK")[1:]+`}
+		]},"page":{"totalElements":3}}`)
+	}))
+	defer srv.Close()
+	res, err := New("k", WithBaseURL(srv.URL), WithRequestGap(0)).ArtistShows(context.Background(), "a1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Shows) != 2 || res.Shows[0].City != "Austin" || res.Shows[0].Region != "TX" || res.Shows[0].Country != "US" || res.Shows[1].City != "Oklahoma City" {
+		t.Fatalf("shows = %+v", res.Shows)
+	}
+}
+
+func TestRequestsAreSpacedAndCached(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n.Add(1)
+		io.WriteString(w, eventsBody)
+	}))
+	defer srv.Close()
+	c := New("k", WithBaseURL(srv.URL), WithRequestGap(30*time.Millisecond))
+	start := time.Now()
+	for _, day := range []string{"2026-11-12", "2026-11-13", "2026-11-14", "2026-11-12"} {
+		if _, err := c.MusicShows(context.Background(), Search{From: day, To: day}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Three distinct searches, spaced at least 30ms apart; the repeat is cached.
+	if n.Load() != 3 {
+		t.Fatalf("requests = %d, want 3", n.Load())
+	}
+	if el := time.Since(start); el < 60*time.Millisecond {
+		t.Fatalf("3 requests took %v, want >= 60ms of spacing", el)
+	}
+}

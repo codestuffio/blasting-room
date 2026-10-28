@@ -17,6 +17,8 @@ type Memo struct {
 	Momentum   string       `json:"momentum"`
 	Audience   Audience     `json:"audience"`
 	CoPromo    []Partner    `json:"co_promo"`
+	Deal       Deal         `json:"deal"`
+	Routing    Routing      `json:"routing"`
 	Risks      []string     `json:"risks"`
 	Shows      []Clash      `json:"competing_shows"`
 	Alternates []Alternate  `json:"alternates"`
@@ -39,6 +41,12 @@ type Partner struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 	Idea string `json:"idea"`
+}
+
+// Routing is how the booking date fits the headliner's tour.
+type Routing struct {
+	Fit     string `json:"fit"`
+	Summary string `json:"summary"`
 }
 
 // Clash is a nearby show the agent judged against the booking.
@@ -124,6 +132,22 @@ var memoProperties = map[string]any{
 		"name": str("Partner name as returned by Qloo"),
 		"idea": str("One concrete activation idea"),
 	})),
+	"deal": obj(map[string]any{
+		"guarantee":            map[string]any{"type": "number", "description": "Guaranteed artist fee in USD, as priced with price_deal; 0 on a pass"},
+		"backend_pct":          map[string]any{"type": "number", "description": "Artist's percentage of the door above the split point, 0-100 (0 for a flat fee)"},
+		"support_fee":          map[string]any{"type": "number", "description": "Flat fee for the support act, USD"},
+		"ticket_price_advance": map[string]any{"type": "number", "description": "Advance ticket price, USD; 0 on a pass"},
+		"ticket_price_door":    map[string]any{"type": "number", "description": "Day-of-show ticket price, USD"},
+		"expected_tickets":     map[string]any{"type": "integer", "description": "Your estimate of tickets sold, from local fit and comparable shows"},
+		"terms":                str("The offer as you'd put it to the act's agent, e.g. '$1,400 guarantee plus 80% after the split point, $20 adv / $25 door'"),
+		"walk_away":            str("The most to concede before passing, or on a pass what would change the answer"),
+		"rationale":            str("Why these numbers: ticket prices elsewhere on tour or at nearby shows, expected turnout, the ask"),
+	}),
+	"routing": obj(map[string]any{
+		"fit": enum("How the date fits the headliner's tour, from tour_dates",
+			"on_the_way", "detour", "off_route", "already_in_market", "already_booked", "no_tour_data", "not_checked"),
+		"summary": str("One or two sentences: where they play before and after, open windows, radius-clause risk"),
+	}),
 	"risks": arr(str("A risk or data gap")),
 	"competing_shows": arr(obj(map[string]any{
 		"name":   str("Show name exactly as returned by competing_shows"),

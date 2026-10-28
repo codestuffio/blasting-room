@@ -47,6 +47,9 @@ const memoInput = `{
   "local_fit": "strong", "momentum": "rising",
   "audience": {"summary": "25-29", "age_skew": "25_to_29 +0.34", "ticket_tier": "standard"},
   "co_promo": [{"kind": "podcast", "name": "Mock Podcast 03", "idea": "ad read"}],
+  "deal": {"guarantee": 1400, "backend_pct": 80, "support_fee": 300, "ticket_price_advance": 20, "ticket_price_door": 25,
+    "expected_tickets": 300, "terms": "$1,400 plus 80%", "walk_away": "$1,600", "rationale": "comparable tickets"},
+  "routing": {"fit": "on_the_way", "summary": "between two nearby dates"},
   "risks": ["synthetic data"],
   "alternates": [],
   "evidence": [
@@ -108,6 +111,10 @@ func TestRunLoopsThroughToolsToMemo(t *testing.T) {
 	}
 	if memo.Headliner.EntityID != "mock-artist-01" || memo.Audience.TicketTier != "standard" || memo.Verdict != "book" {
 		t.Fatalf("memo = %+v", memo)
+	}
+	// The server prices the deal from the terms and the venue's costs.
+	if m := memo.Deal.Math; m == nil || m.Capacity != 450 || m.BreakEvenTickets != 175 || len(m.Scenarios) != 4 {
+		t.Fatalf("deal math = %+v", memo.Deal.Math)
 	}
 	// Only refs that name a call of the cited tool survive.
 	var gotRefs []string

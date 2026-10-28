@@ -16,6 +16,10 @@ type Venue struct {
 	Lon          float64 `json:"lon"`
 	Capacity     int     `json:"capacity"`
 	Vibe         string  `json:"vibe"`
+	// Nightly economics for pricing offers. Demo values are made up but in
+	// the range of real rooms this size.
+	HouseCosts    float64 `json:"house_costs"`      // staff, sound, security, rent share
+	BarNetPerHead float64 `json:"bar_net_per_head"` // bar revenue after cost of goods
 	// Seeds are artists the room already sells well. Qloo's artist discovery
 	// needs a taste signal besides location, or it returns city-wide superstars.
 	Seeds []string `json:"seeds"`
@@ -43,9 +47,9 @@ func (v Venue) setLocationSignal(p url.Values) {
 }
 
 var DemoVenues = []Venue{
-	{ID: "lantern", Name: "The Lantern Room", Neighborhood: "Logan Square", City: "Chicago", Lat: 41.9231, Lon: -87.7093, Capacity: 450, Vibe: "indie, alt, post-punk; strong weeknight bar crowd", Seeds: []string{"Horsegirl", "Wednesday", "Dehd"}},
-	{ID: "copperline", Name: "Copperline", Neighborhood: "East Austin", City: "Austin", Lat: 30.2622, Lon: -97.7223, Capacity: 700, Vibe: "alt-country, garage rock, psych; festival-season spillover", Seeds: []string{"MJ Lenderman", "Ty Segall", "Night Beats"}},
-	{ID: "harbor", Name: "Harbor Hall", Neighborhood: "Ballard", City: "Seattle", Lat: 47.6687, Lon: -122.3846, Capacity: 350, Vibe: "dream pop, folk, shoegaze; older listening-room crowd", Seeds: []string{"Beach House", "Fleet Foxes", "Slowdive"}},
+	{ID: "lantern", Name: "The Lantern Room", Neighborhood: "Logan Square", City: "Chicago", Lat: 41.9231, Lon: -87.7093, Capacity: 450, Vibe: "indie, alt, post-punk; strong weeknight bar crowd", HouseCosts: 1800, BarNetPerHead: 9, Seeds: []string{"Horsegirl", "Wednesday", "Dehd"}},
+	{ID: "copperline", Name: "Copperline", Neighborhood: "East Austin", City: "Austin", Lat: 30.2622, Lon: -97.7223, Capacity: 700, Vibe: "alt-country, garage rock, psych; festival-season spillover", HouseCosts: 2600, BarNetPerHead: 10, Seeds: []string{"MJ Lenderman", "Ty Segall", "Night Beats"}},
+	{ID: "harbor", Name: "Harbor Hall", Neighborhood: "Ballard", City: "Seattle", Lat: 47.6687, Lon: -122.3846, Capacity: 350, Vibe: "dream pop, folk, shoegaze; older listening-room crowd", HouseCosts: 1400, BarNetPerHead: 8, Seeds: []string{"Beach House", "Fleet Foxes", "Slowdive"}},
 }
 
 func FindVenue(id string) (Venue, bool) {

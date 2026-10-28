@@ -13,10 +13,10 @@ Svelte SPA ──POST /api/runs──► Go server ──► Claude (tool-use lo
      ▲                              │              │
      └──── SSE: trace + memo ◄──────┘              ▼
                                          Qloo tools (hackathon API)
-                                         + Ticketmaster show check
+                                         + Ticketmaster shows and tours
 ```
 
-A Go tool-use loop on Claude drives a set of Qloo tools, plus one Ticketmaster check:
+A Go tool-use loop on Claude drives a set of Qloo tools, plus Ticketmaster lookups and a deal calculator:
 
 | Tool | Endpoint | Purpose |
 |---|---|---|
@@ -30,6 +30,8 @@ A Go tool-use loop on Claude drives a set of Qloo tools, plus one Ticketmaster c
 | `audience_demographics` | `/v2/insights` (`urn:demographics`) | age/gender skew → ticket tier |
 | `co_promo_partners` | `/v2/insights` (cross-domain place/podcast/brand) | nearby bars, podcasts, sponsors |
 | `competing_shows` | Ticketmaster Discovery `/events` (music, 5 mi, the date ±1 night) | shows that would pull the same crowd the same night, pinned on the map |
+| `tour_dates` | Ticketmaster Discovery `/attractions` + `/events` by act | how the date fits the act's tour: nights before and after, open windows nearby, radius-clause risk, ticket prices elsewhere |
+| `price_deal` | — (server-side math) | prices an offer against the room's costs: break-even and what each side takes home at half, three-quarters and a full house |
 | `submit_booking_memo` | — | strict-schema final memo |
 
 The UI streams every tool call and result as it happens, then shows the memo.

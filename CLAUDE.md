@@ -48,6 +48,14 @@ make docker
   - Auth is the consumer key as the `apikey` query param. The client strips the request URL from transport errors so the key never reaches a log or the model.
   - Without `TICKETMASTER_API_KEY` the tool returns `checked: false`, and the agent names the gap in risks. Don't commit Ticketmaster responses either; test fixtures are synthetic.
   - The tool returns `withGeo`: show venues stream as a `shows` geo event and draw as hollow red rings, distinct by shape from the filled partner pins.
+  - The client spaces requests 220 ms apart (the API allows 5 a second and tools run in parallel) and caches responses in memory for 30 minutes.
+- **Tour routing** (`tour_dates`, `internal/agent/route.go`): looks up the act by exact name (keyword search is loose), lists its events with `locale=*`, and drops a second listing for the same night and city.
+  - `routeFit` judges the date: `on_the_way`, `detour`, `off_route`, `already_booked`, `already_in_market` (a show within `marketMiles` 100 in `marketDays` 60), `no_tour_data`, `not_checked`. `routeWindows` finds open nights between stops within `driveMiles` 450.
+  - It returns `withRoute{model, route}`: the full stop list streams as a `route` event for `RouteChart.svelte`. Keep `Route` in `route.go` and `types.ts` in sync.
+  - Ticketmaster's indie coverage is uneven (live probe: Wednesday 17 dates, Cut Worms and FACS 1 each, Ty Segall 0 despite a listed count), so a short or empty tour is never evidence of a light schedule.
+- **Deal math** (`price_deal`, `internal/agent/deal.go`): a "plus" deal — guarantee plus `backend_pct` of the door above the split point (house costs + support fee + guarantee), at the advance price, before fees.
+  - Demo venues carry made-up `HouseCosts` and `BarNetPerHead`.
+  - The model sets the memo's `deal` terms; the server fills `deal.math` from them with `dealMath` after the memo arrives. `math` is not in the memo schema, so the numbers a buyer reads never come from the model's arithmetic.
 - **Deploy (Coolify + Cloudflare Tunnel):**
   - Runs are capped per UTC day across all visitors (`BR_DAILY_RUNS`, default 100); `/api/health` reports `runs_left_today`. The Qloo cache is bounded at 64 MB, and the IP limiter drops idle visitors.
   - Rate limiting keys on `BR_CLIENT_IP_HEADER` (`CF-Connecting-IP` in production), never on raw `X-Forwarded-For`, which clients can forge.

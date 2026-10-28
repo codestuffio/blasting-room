@@ -316,6 +316,8 @@ func toolset(q *qloo.Client, shows *ticketmaster.Client, v Venue) []tool {
 			},
 		},
 		competingShowsTool(shows, v),
+		tourDatesTool(shows, v),
+		priceDealTool(v),
 		{
 			name:        memoToolName,
 			description: "Submit the final booking memo. Call exactly once, after the evidence is gathered.",
