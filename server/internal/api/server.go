@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -36,9 +37,13 @@ type Server struct {
 	// Heartbeat is how often a run's event stream sends a comment line, so
 	// proxies don't close it while the agent is quiet. Zero means 15s.
 	Heartbeat time.Duration
+	// DailyRuns caps agent runs per UTC day across all visitors, bounding
+	// the Anthropic bill for the public demo. Zero means no cap.
+	DailyRuns int
 
 	slots   chan struct{} // caps concurrent agent runs
 	limiter *ipLimiter
+	budget  *dailyBudget
 }
 
 func (s *Server) Handler() http.Handler {
@@ -47,6 +52,9 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.limiter == nil {
 		s.limiter = newIPLimiter(6, time.Hour)
+	}
+	if s.budget == nil && s.DailyRuns > 0 {
+		s.budget = newDailyBudget(s.DailyRuns, time.Now)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
@@ -64,6 +72,9 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	}
 	if s.QlooMock {
 		body["mock_scenario"] = s.MockScenario
+	}
+	if s.budget != nil {
+		body["runs_left_today"] = s.budget.left()
 	}
 	writeJSON(w, http.StatusOK, body)
 }
@@ -91,6 +102,10 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "offer_artist is required for vet_offer"})
 		return
 	}
+	if s.budget != nil && s.budget.left() == 0 {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "today's demo runs are used up, try again after midnight UTC"})
+		return
+	}
 	if !s.limiter.allow(s.clientIP(r)) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "demo rate limit reached, try again later"})
 		return
@@ -100,6 +115,11 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 		defer func() { <-s.slots }()
 	default:
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "all booking agents are busy, try again in a minute"})
+		return
+	}
+	// Checked above too, but a concurrent run may have taken the last one.
+	if s.budget != nil && !s.budget.take() {
+		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "today's demo runs are used up, try again after midnight UTC"})
 		return
 	}
 
@@ -154,10 +174,24 @@ func (s *Server) run(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	if _, err := s.Runner.Run(ctx, req, emit); err != nil {
 		s.Log.Warn("run failed", "venue", req.VenueID, "err", err)
-		emit(agent.Event{Type: "error", Data: map[string]string{"message": err.Error()}})
+		emit(agent.Event{Type: "error", Data: map[string]string{"message": publicError(ctx, err)}})
 		return
 	}
 	s.Log.Info("run complete", "venue", req.VenueID, "mode", req.Mode, "elapsed", time.Since(start).Round(time.Millisecond))
+}
+
+// publicError is what a visitor sees when a run fails. The agent's own
+// errors are written for people; transport errors are not, and can carry
+// internal addresses, so those stay in the log.
+func publicError(ctx context.Context, err error) string {
+	switch {
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return "The run hit the 5-minute limit and was stopped. Try again, or give the agent a narrower brief."
+	case errors.Is(err, agent.ErrClaude):
+		return "The booking agent couldn't reach Claude just now. Try again in a minute."
+	default:
+		return err.Error()
+	}
 }
 
 // static serves the SPA build. Unknown paths get SvelteKit's 200.html
@@ -201,11 +235,14 @@ func (s *Server) clientIP(r *http.Request) string {
 }
 
 // ipLimiter allows n runs per IP per window; agent runs are expensive.
+// Visitors whose hits have all expired are dropped, so the map doesn't grow
+// for the life of the process.
 type ipLimiter struct {
 	n      int
 	window time.Duration
 	mu     sync.Mutex
 	hits   map[string][]time.Time
+	sweep  time.Time // next time to drop idle visitors
 }
 
 func newIPLimiter(n int, window time.Duration) *ipLimiter {
@@ -216,6 +253,14 @@ func (l *ipLimiter) allow(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	now := time.Now()
+	if now.After(l.sweep) {
+		for k, ts := range l.hits {
+			if len(ts) == 0 || now.Sub(ts[len(ts)-1]) >= l.window {
+				delete(l.hits, k)
+			}
+		}
+		l.sweep = now.Add(l.window)
+	}
 	kept := l.hits[ip][:0]
 	for _, t := range l.hits[ip] {
 		if now.Sub(t) < l.window {
@@ -227,5 +272,44 @@ func (l *ipLimiter) allow(ip string) bool {
 		return false
 	}
 	l.hits[ip] = append(kept, now)
+	return true
+}
+
+// dailyBudget allows n runs per UTC day in total. Failed runs count too:
+// they cost tokens.
+type dailyBudget struct {
+	n    int
+	now  func() time.Time
+	mu   sync.Mutex
+	day  string
+	used int
+}
+
+func newDailyBudget(n int, now func() time.Time) *dailyBudget {
+	return &dailyBudget{n: n, now: now}
+}
+
+// roll resets the count when the UTC day changes. Callers hold mu.
+func (b *dailyBudget) roll() {
+	if d := b.now().UTC().Format(time.DateOnly); d != b.day {
+		b.day, b.used = d, 0
+	}
+}
+
+func (b *dailyBudget) left() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.roll()
+	return b.n - b.used
+}
+
+func (b *dailyBudget) take() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.roll()
+	if b.used >= b.n {
+		return false
+	}
+	b.used++
 	return true
 }

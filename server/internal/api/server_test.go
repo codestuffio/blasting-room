@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -181,5 +183,90 @@ func TestRateLimitIsPerVisitorBehindATunnel(t *testing.T) {
 	}
 	if code := post("198.51.100.2"); code != http.StatusOK {
 		t.Fatalf("another visitor: %d, want 200", code)
+	}
+}
+
+// The daily budget is shared by every visitor, unlike the per-IP limit.
+func TestDailyBudgetCapsRunsAcrossVisitors(t *testing.T) {
+	srv := newTestServer(t, stubRunner{}, func(s *Server) {
+		s.ClientIPHeader = "CF-Connecting-IP"
+		s.DailyRuns = 2
+	})
+	post := func(ip string) int {
+		r, _ := http.NewRequest("POST", srv.URL+"/api/runs", strings.NewReader(`{"venue_id":"lantern","mode":"fill_date"}`))
+		r.Header.Set("CF-Connecting-IP", ip)
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if _, body := get(t, srv.URL+"/api/health"); !strings.Contains(body, `"runs_left_today":2`) {
+		t.Fatalf("health before runs: %s", body)
+	}
+	for i, ip := range []string{"198.51.100.1", "198.51.100.2"} {
+		if code := post(ip); code != http.StatusOK {
+			t.Fatalf("run %d: %d", i+1, code)
+		}
+	}
+	if code := post("198.51.100.3"); code != http.StatusTooManyRequests {
+		t.Fatalf("run past the budget: %d, want 429", code)
+	}
+	if _, body := get(t, srv.URL+"/api/health"); !strings.Contains(body, `"runs_left_today":0`) {
+		t.Fatalf("health after runs: %s", body)
+	}
+}
+
+func TestDailyBudgetResetsAtUTCMidnight(t *testing.T) {
+	now := time.Date(2026, 11, 3, 23, 59, 0, 0, time.UTC)
+	b := newDailyBudget(1, func() time.Time { return now })
+	if !b.take() || b.take() || b.left() != 0 {
+		t.Fatal("budget of 1 should allow exactly one run")
+	}
+	now = now.Add(2 * time.Minute)
+	if b.left() != 1 || !b.take() {
+		t.Fatal("budget should reset on the next UTC day")
+	}
+}
+
+func TestLimiterForgetsIdleVisitors(t *testing.T) {
+	l := newIPLimiter(1, 10*time.Millisecond)
+	l.allow("198.51.100.1")
+	l.allow("198.51.100.2")
+	time.Sleep(20 * time.Millisecond)
+	l.allow("198.51.100.3")
+	if _, ok := l.hits["198.51.100.1"]; ok || len(l.hits) != 1 {
+		t.Fatalf("hits = %v, want only the latest visitor", l.hits)
+	}
+}
+
+type failingRunner struct{ err error }
+
+func (r failingRunner) Run(context.Context, agent.Request, func(agent.Event)) (*agent.Memo, error) {
+	return nil, r.err
+}
+
+func TestRunErrorsHideTransportDetails(t *testing.T) {
+	for _, c := range []struct {
+		err      error
+		want     string
+		mustSkip string
+	}{
+		{fmt.Errorf("%w: %w", agent.ErrClaude, errors.New(`Post "http://10.0.0.5/v1/messages": dial tcp: refused`)), "couldn't reach Claude", "10.0.0.5"},
+		{errors.New("the model declined this request"), "the model declined this request", ""},
+	} {
+		srv := newTestServer(t, failingRunner{c.err})
+		resp, err := http.Post(srv.URL+"/api/runs", "application/json", strings.NewReader(`{"venue_id":"lantern","mode":"fill_date"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		body := string(b)
+		if !strings.Contains(body, "event: error") || !strings.Contains(body, c.want) || c.mustSkip != "" && strings.Contains(body, c.mustSkip) {
+			t.Fatalf("%v: stream %q", c.err, body)
+		}
 	}
 }

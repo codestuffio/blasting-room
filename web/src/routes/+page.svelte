@@ -33,8 +33,9 @@
 	let venue = $derived(venues.find((v) => v.id === venueId));
 	let geo = $derived(events.flatMap((e) => (e.type === 'geo' ? [e.data] : [])));
 	let trends = $derived(events.flatMap((e) => (e.type === 'trend' ? [e.data] : [])));
+	let spent = $derived(health?.runs_left_today === 0);
 	let canRun = $derived(
-		!!health?.agent_ready && !!venue && !running && (mode === 'fill_date' || offerArtist.trim() !== '')
+		!!health?.agent_ready && !spent && !!venue && !running && (mode === 'fill_date' || offerArtist.trim() !== '')
 	);
 
 	onMount(async () => {
@@ -71,6 +72,8 @@
 		} finally {
 			running = false;
 			controller = null;
+			// Refresh the runs-left count; a failed refresh keeps the old status.
+			getHealth().then((h) => (health = h), () => {});
 		}
 	}
 </script>
@@ -152,6 +155,11 @@
 					{running ? 'Working…' : 'Run the booking agent'}
 				</button>
 				{#if running}<button type="button" class="ghost" onclick={() => controller?.abort()}>Stop</button>{/if}
+				{#if spent}
+					<p class="budget">Today's demo runs are used up. The agent is back after midnight UTC.</p>
+				{:else if health?.runs_left_today !== undefined && health.runs_left_today <= 10}
+					<p class="budget">{health.runs_left_today} demo {health.runs_left_today === 1 ? 'run' : 'runs'} left today</p>
+				{/if}
 			</div>
 		</fieldset>
 	</form>
@@ -364,6 +372,7 @@
 	}
 	.actions {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 0.6rem;
 		margin-top: 1.1rem;
 	}
@@ -394,6 +403,13 @@
 	button:disabled {
 		opacity: 0.45;
 		cursor: not-allowed;
+	}
+	.budget {
+		align-self: center;
+		margin: 0;
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+		color: var(--accent-text);
 	}
 	button.ghost {
 		font-family: var(--font-mono);

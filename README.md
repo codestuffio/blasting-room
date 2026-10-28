@@ -73,6 +73,7 @@ That runs `go vet`, the Go tests and `svelte-check`.
 | `BR_MODEL` | `claude-opus-5-5` | |
 | `BR_EFFORT` | `medium` | `low` / `medium` / `high` / `xhigh` / `max` |
 | `BR_MAX_TURNS` | `20` | Upper bound on agent turns per run |
+| `BR_DAILY_RUNS` | `100` | Agent runs allowed per UTC day across all visitors, to cap Anthropic spend on a public demo. `0` = no cap |
 | `BR_CLIENT_IP_HEADER` | — | Header from a trusted proxy holding the visitor's IP, for rate limiting. Set `CF-Connecting-IP` behind a Cloudflare Tunnel, and only when every request comes through it |
 | `PORT` | `8080` | |
 | `STATIC_DIR` | `../web/build` | Built SPA served by the Go binary |

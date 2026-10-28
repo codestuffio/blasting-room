@@ -45,6 +45,7 @@ make docker
     - `output.heatmap.boundary` accepts only `urn:geohash` or `urn:entity:locality`, and `urn:entity:locality` returned 0 cells for Chicago. Keep the default boundary, which the map draws.
 - **Never commit Qloo response data** (hackathon terms). Caching stays in memory on the server.
 - **Deploy (Coolify + Cloudflare Tunnel):**
+  - Runs are capped per UTC day across all visitors (`BR_DAILY_RUNS`, default 100); `/api/health` reports `runs_left_today`. The Qloo cache is bounded at 64 MB, and the IP limiter drops idle visitors.
   - Rate limiting keys on `BR_CLIENT_IP_HEADER` (`CF-Connecting-IP` in production), never on raw `X-Forwarded-For`, which clients can forge.
   - `POST /api/runs` flushes its headers at once and sends `: keepalive` comments (`Server.Heartbeat`, default 15s). Clients must skip frames with no `event:` line.
   - The image is distroless with no curl, so its `HEALTHCHECK` runs `blastingroom -healthcheck`.

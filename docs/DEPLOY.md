@@ -27,7 +27,7 @@ Cloudflare handles TLS. Everything after the tunnel is plain HTTP on the homelab
    | `QLOO_API_KEY` | your hackathon key |
    | `BR_CLIENT_IP_HEADER` | `CF-Connecting-IP` |
 
-   Optional: `BR_EFFORT`, `BR_MAX_TURNS`, `BR_MODEL` (defaults are in the README). Don't set `PORT` or `STATIC_DIR`; the image sets them.
+   Optional: `BR_DAILY_RUNS`, `BR_EFFORT`, `BR_MAX_TURNS`, `BR_MODEL` (defaults are in the README). `BR_DAILY_RUNS` (default 100) caps runs per UTC day across all visitors, which bounds the Anthropic bill while the demo is public. Don't set `PORT` or `STATIC_DIR`; the image sets them.
 
    `BR_CLIENT_IP_HEADER` matters. Behind the tunnel every request reaches the app from the proxy, so without it all visitors share one 6-runs-per-hour limit.
 6. **Health check:**
