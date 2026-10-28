@@ -70,7 +70,8 @@ make docker
   - Message history is append-only. Pass `resp.ToParam()` back unchanged.
 - **Tool schemas must serialize deterministically** (sorted `required`) so the prompt cache stays warm.
 - **Changing tools or the memo:**
-  - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`.
+  - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`, a `describeCall` case in `internal/agent/describe.go` (the trace shows that summary instead of raw JSON), and a stage in `RunSheet.svelte`.
+  - Entity names are learned from tool results during a run (`names.learn`) and stream on `tool_result.names`, so the trace and the map label artists before the memo arrives.
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
   - **Provenance:** `runTools` gives each call a run-local ref (`Q1`, `Q2`, …), streamed on `tool_call` and prefixed to the result as a `ref Qn` line. Memo evidence cites the ref, and `checkMemo` clears any ref that names no call of the cited tool. The evidence trail links each ref to its row in the trace (`#call-Qn`).
 - **Map and chart data never go to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap`, place `co_promo_partners` and `competing_shows` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
@@ -91,5 +92,6 @@ make docker
 - **PDF export** is `window.print()` with `@media print` styles (no PDF library). Print shows only the memo, in the light palette.
   - WebGL can print blank, so print shows a PNG snapshot of the map. `VenueMap.prepareForPrint()` re-renders the map light at 2× before the snapshot and reverts on `afterprint`. A plain Cmd+P snapshots the map as it is on `beforeprint`, which relies on `preserveDrawingBuffer`.
 - **Demo venues** use fictional names in real neighborhoods.
+  - The "Try an example" chips in `+page.svelte` fill the form but never start a run. The two vet examples rely on Wednesday's live Ticketmaster tour (St. Louis Nov 18, Radio East in Austin Nov 14) and hide themselves once their dates pass; re-check them if the demo stories change.
 - **Agent tests** use a fake Messages API (`httptest`). Never call the real Anthropic API from tests.
 - **Local Go may be older than 1.24.** `go.mod` pins `toolchain go1.24.9`, which downloads automatically.
