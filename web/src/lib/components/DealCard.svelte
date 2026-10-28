@@ -76,12 +76,12 @@
 			{#if expected > 0}
 				<span class="mark exp {edge(expected)}" style:left={at(expected)}>
 					<i aria-hidden="true"></i>
-					<span>Expected ~{expected}{edge(expected) === 'hi' ? ` of ${math.capacity} cap` : ''}</span>
+					<span>Expected ~{expected}</span>
 				</span>
 			{/if}
-			<!-- An end label gives way to a marker that hangs over that end. -->
-			{#if edge(expected) !== 'lo'}<span class="end start">0</span>{/if}
-			{#if edge(expected) !== 'hi'}<span class="end stop">{math.capacity} cap</span>{/if}
+			<!-- Scale ends share the top row with break-even, and give way when it hangs over an end. -->
+			{#if edge(breakEven) !== 'lo'}<span class="end start">0</span>{/if}
+			{#if edge(breakEven) !== 'hi'}<span class="end stop">{math.capacity} cap</span>{/if}
 		</div>
 		<p class="note">
 			The door covers the guarantee and the room's {usd(math.house_costs)} nightly costs at <strong>{breakEven}</strong> tickets
@@ -237,7 +237,7 @@
 	}
 	.end {
 		position: absolute;
-		top: 3.3rem;
+		top: 0.6rem;
 		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--muted);
