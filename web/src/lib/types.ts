@@ -38,7 +38,10 @@ export interface Pick {
 	rationale: string[];
 }
 
+export type Verdict = 'book' | 'book_with_changes' | 'pass';
+
 export interface Memo {
+	verdict: Verdict;
 	summary: string;
 	confidence: 'low' | 'medium' | 'high';
 	headliner: Pick;
@@ -49,11 +52,13 @@ export interface Memo {
 	co_promo: { kind: 'place' | 'podcast' | 'brand'; name: string; idea: string }[];
 	risks: string[];
 	alternates: { name: string; entity_id: string; reason: string }[];
-	evidence: { claim: string; tool: string }[];
+	// ref is the trace call ("Q3") behind the claim; empty when the server could not match it to one.
+	evidence: { claim: string; tool: string; ref: string }[];
 }
 
 export interface ToolCall {
 	id: string;
+	ref: string;
 	name: string;
 	input: unknown;
 }

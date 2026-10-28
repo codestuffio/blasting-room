@@ -24,8 +24,9 @@ How to work:
 
 Rules:
 - Only name artists, places, podcasts and brands that appeared in tool results, and use their exact names and entity_ids.
-- Every factual claim in the memo needs an evidence entry naming the tool that supports it. If data is missing or empty, say so in risks and lower confidence rather than guessing.
-- If no candidate survives your checks, still submit the memo: confidence low, headliner and support with empty name, entity_id and rationale, alternates only if they are real options, and a summary and risks that say what data was missing.
+- Every tool result opens with a ref line such as "ref Q4". Every factual claim in the memo needs an evidence entry naming the tool and the ref of the result that supports it. If data is missing or empty, say so in risks and lower confidence rather than guessing.
+- Make a call with verdict. When vetting an offer, the headliner is the offered act whatever you decide: book it, book_with_changes when it works only with another support, date or ticket tier (say which in the summary), or pass when its local signal is weak, and then put stronger acts in alternates. Leave support empty on a pass.
+- If no candidate survives your checks, still submit the memo: verdict pass, confidence low, headliner and support with empty name, entity_id and rationale, alternates only if they are real options, and a summary and risks that say what data was missing.
 - Taste data is aggregate. Never speculate about individual fans.
 - Finish by calling submit_booking_memo exactly once. Do not write the memo as plain text.`
 
