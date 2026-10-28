@@ -94,7 +94,7 @@ A single page, exportable to PDF:
 - **External APIs:**
   - Qloo, at `https://hackathon.api.qloo.com`
   - Anthropic
-  - Ticketmaster Discovery later, for competing events (5K calls/day, 5 req/s)
+  - Ticketmaster Discovery, for competing shows near the venue around the date (5K calls/day, 5 req/s)
 - **Hosting:** a single multi-stage Docker image (Node builds the web app → Go builds the binary → a small runtime image). It runs on a homelab Coolify instance, published through a Cloudflare Tunnel ([DEPLOY.md](DEPLOY.md)).
 - **Repo:** public GitHub, MIT license (make sure it shows in the About sidebar), README with setup and env vars.
 

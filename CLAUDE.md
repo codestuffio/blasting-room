@@ -44,6 +44,10 @@ make docker
     - A `/v2/analysis/compare` response for two artists is about 44 KB, mostly because every shared tag repeats both groups' entities. `compare_audiences` sends the model `summarizeCompare` (the top shared tags with scores, plus the tags only one side has) instead of the raw response.
     - `output.heatmap.boundary` accepts only `urn:geohash` or `urn:entity:locality`, and `urn:entity:locality` returned 0 cells for Chicago. Keep the default boundary, which the map draws.
 - **Never commit Qloo response data** (hackathon terms). Caching stays in memory on the server.
+- **Ticketmaster** (`internal/ticketmaster`, `competing_shows`): Discovery API event search, music only, 5 miles around the venue, the date ±1 night by default.
+  - Auth is the consumer key as the `apikey` query param. The client strips the request URL from transport errors so the key never reaches a log or the model.
+  - Without `TICKETMASTER_API_KEY` the tool returns `checked: false`, and the agent names the gap in risks. Don't commit Ticketmaster responses either; test fixtures are synthetic.
+  - The tool returns `withGeo`: show venues stream as a `shows` geo event and draw as hollow red rings, distinct by shape from the filled partner pins.
 - **Deploy (Coolify + Cloudflare Tunnel):**
   - Runs are capped per UTC day across all visitors (`BR_DAILY_RUNS`, default 100); `/api/health` reports `runs_left_today`. The Qloo cache is bounded at 64 MB, and the IP limiter drops idle visitors.
   - Rate limiting keys on `BR_CLIENT_IP_HEADER` (`CF-Connecting-IP` in production), never on raw `X-Forwarded-For`, which clients can forge.
@@ -61,7 +65,7 @@ make docker
   - Add a tool in `internal/agent/tools.go` and give it a label in `web/src/lib/components/Trace.svelte`.
   - When the memo changes, keep `Memo` (Go), `memoProperties` (the schema) and `web/src/lib/types.ts` in sync.
   - **Provenance:** `runTools` gives each call a run-local ref (`Q1`, `Q2`, …), streamed on `tool_call` and prefixed to the result as a `ref Qn` line. Memo evidence cites the ref, and `checkMemo` clears any ref that names no call of the cited tool. The evidence trail links each ref to its row in the trace (`#call-Qn`).
-- **Map and chart data never go to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap` and place `co_promo_partners` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
+- **Map and chart data never go to the model.** A tool that has data for the map returns `withGeo{model, geo}`. `runTools` sends `model` to Claude and streams `geo` as a `geo` SSE event (`local_heatmap`, place `co_promo_partners` and `competing_shows` do this today). Keep `Geo` in `internal/agent/geo.go` and in `web/src/lib/types.ts` in sync.
   - `momentum` does the same with `withTrend{model, trend}`: the model gets a start/end/direction summary per artist, and the full series streams as a `trend` event for `MomentumChart.svelte`. Keep `Trend` in `internal/agent/trend.go` and in `types.ts` in sync.
   - `/v2/trending` takes exactly one entity per call, and windows much shorter than 6 months come back empty, so `momentum` asks for 6 months per artist. Points are `{date, population_percentile, population_rank, population_rank_velocity, velocity_fold_change, population_percent_delta}` under `results.trending`.
   - On the hackathon host every series probed so far is constant (one percentile, zero velocity). `trendSummary` marks those `constant` so the model claims no momentum, and `MomentumChart` notes the lack of movement. Don't pitch "rising momentum" unless the probe shows series that move.

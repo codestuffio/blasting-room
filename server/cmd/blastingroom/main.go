@@ -18,6 +18,7 @@ import (
 	"blastingroom/internal/agent"
 	"blastingroom/internal/api"
 	"blastingroom/internal/qloo"
+	"blastingroom/internal/ticketmaster"
 )
 
 func main() {
@@ -47,6 +48,14 @@ func main() {
 		log.Warn("qloo: QLOO_API_KEY not set, serving synthetic mock data", "scenario", scenario)
 	}
 
+	var shows *ticketmaster.Client
+	if key := os.Getenv("TICKETMASTER_API_KEY"); key != "" {
+		shows = ticketmaster.New(key)
+		log.Info("ticketmaster: live")
+	} else {
+		log.Warn("ticketmaster: TICKETMASTER_API_KEY not set, competing-show checks are skipped")
+	}
+
 	dailyRuns, err := strconv.Atoi(env("BR_DAILY_RUNS", "100"))
 	if err != nil || dailyRuns < 0 {
 		log.Error("bad BR_DAILY_RUNS, want a whole number (0 for no cap)", "value", os.Getenv("BR_DAILY_RUNS"))
@@ -59,6 +68,7 @@ func main() {
 		Log:            log,
 		ClientIPHeader: os.Getenv("BR_CLIENT_IP_HEADER"),
 		DailyRuns:      dailyRuns,
+		ShowsCheck:     shows != nil,
 	}
 	if srv.ClientIPHeader != "" {
 		log.Info("rate limit keyed on a proxy header", "header", srv.ClientIPHeader)
@@ -69,6 +79,7 @@ func main() {
 			Model:    env("BR_MODEL", "claude-opus-5-5"),
 			Effort:   env("BR_EFFORT", "medium"),
 			MaxTurns: maxTurns,
+			Shows:    shows,
 		})
 	} else {
 		log.Warn("agent disabled: ANTHROPIC_API_KEY not set")

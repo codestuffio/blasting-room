@@ -25,6 +25,7 @@ Cloudflare handles TLS. Everything after the tunnel is plain HTTP on the homelab
    |---|---|
    | `ANTHROPIC_API_KEY` | your key |
    | `QLOO_API_KEY` | your hackathon key |
+   | `TICKETMASTER_API_KEY` | your Discovery API consumer key (not the secret) |
    | `BR_CLIENT_IP_HEADER` | `CF-Connecting-IP` |
 
    Optional: `BR_DAILY_RUNS`, `BR_EFFORT`, `BR_MAX_TURNS`, `BR_MODEL` (defaults are in the README). `BR_DAILY_RUNS` (default 100) caps runs per UTC day across all visitors, which bounds the Anthropic bill while the demo is public. Don't set `PORT` or `STATIC_DIR`; the image sets them.

@@ -41,11 +41,17 @@
 			[memo.headliner, memo.support, ...memo.alternates].map((p) => [p.entity_id, p.name])
 		)
 	);
-	let partnerNames = $derived(memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name));
+	// Map labels the memo names win collisions: its co-promo places and the venues of competing shows.
+	let highlight = $derived([
+		...memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name),
+		...(memo.competing_shows ?? []).map((s) => s.venue)
+	]);
+	let clashes = $derived(memo.competing_shows ?? []);
 
 	let linked = $derived(memo.evidence.filter((ev) => ev.ref).length);
 
 	const verdictLabel = { book: 'Book it', book_with_changes: 'Book with changes', pass: 'Pass' };
+	const threatLabel = { high: 'High', medium: 'Medium', low: 'Low' };
 	const kindLabel = { place: 'Nearby spot', podcast: 'Podcast', brand: 'Brand' };
 	const needle = { low: 0.2, medium: 0.55, high: 0.9 };
 	const tiers = ['budget', 'standard', 'premium'] as const;
@@ -124,7 +130,7 @@
 	{#if geo.length}
 		<section>
 			<h3>Where the fans are</h3>
-			<VenueMap bind:this={mapView} {venue} {geo} {names} focus={memo.headliner.entity_id} highlight={partnerNames} />
+			<VenueMap bind:this={mapView} {venue} {geo} {names} focus={memo.headliner.entity_id} {highlight} />
 		</section>
 	{/if}
 
@@ -169,6 +175,22 @@
 						<span class="kind">{kindLabel[c.kind]}</span>
 						<strong>{c.name}</strong>
 						<span>{c.idea}</span>
+					</li>
+				{/each}
+			</ul>
+		</section>
+	{/if}
+
+	{#if clashes.length}
+		<section>
+			<h3>Competing shows nearby</h3>
+			<ul class="clashes">
+				{#each clashes as s, i (i)}
+					<li>
+						<span class="threat"><span class="led" class:bad={s.threat === 'high'} class:on={s.threat === 'medium'}></span>{threatLabel[s.threat]}</span>
+						<strong>{s.name}</strong>
+						<span class="where">{s.venue} · {s.date}</span>
+						<span class="why">{s.note}</span>
 					</li>
 				{/each}
 			</ul>
@@ -405,6 +427,36 @@
 		grid-column: 2;
 		color: var(--muted);
 	}
+	.clashes {
+		list-style: none;
+		padding: 0;
+		display: grid;
+		gap: 0.6rem;
+	}
+	.clashes li {
+		display: grid;
+		grid-template-columns: 7rem 1fr;
+		gap: 0.15rem 0.75rem;
+	}
+	.clashes .where,
+	.clashes .why {
+		grid-column: 2;
+		color: var(--muted);
+	}
+	.clashes .where {
+		font-family: var(--font-mono);
+		font-size: 0.8rem;
+	}
+	.threat {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--muted);
+	}
 	.kind {
 		color: var(--accent-text);
 		font-family: var(--font-mono);
@@ -464,6 +516,7 @@
 		.picks > div,
 		.grid > div,
 		.partners li,
+		.clashes li,
 		tr {
 			break-inside: avoid;
 		}
@@ -488,10 +541,13 @@
 		}
 	}
 	@media (max-width: 520px) {
-		.partners li {
+		.partners li,
+		.clashes li {
 			grid-template-columns: 1fr;
 		}
-		.partners li span:last-child {
+		.partners li span:last-child,
+		.clashes .where,
+		.clashes .why {
 			grid-column: 1;
 		}
 	}

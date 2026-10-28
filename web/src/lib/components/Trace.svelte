@@ -25,6 +25,7 @@
 		compare_audiences: 'Compare audiences',
 		audience_demographics: 'Audience demographics',
 		co_promo_partners: 'Co-promo partners',
+		competing_shows: 'Competing shows',
 		submit_booking_memo: 'Write booking memo'
 	};
 

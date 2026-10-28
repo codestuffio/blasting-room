@@ -40,11 +40,15 @@
 			.map(([id, cells], i) => ({ id, cells, label: names[id] ?? `Artist ${i + 1}` }))
 			.sort((a, b) => Number(b.id === focus) - Number(a.id === focus));
 	});
+	// Co-promo partners and venues with competing shows, each pinned once.
 	let places = $derived.by(() => {
-		const byId = new Map<string, GeoPlace>();
-		for (const g of geo) for (const p of g.places ?? []) byId.set(p.entity_id, p);
+		const byId = new Map<string, GeoPlace & { kind: 'partner' | 'show' }>();
+		for (const g of geo)
+			for (const p of g.places ?? []) byId.set(p.entity_id, { ...p, kind: g.kind === 'shows' ? 'show' : 'partner' });
 		return [...byId.values()];
 	});
+	let partnerCount = $derived(places.filter((p) => p.kind === 'partner').length);
+	let showCount = $derived(places.filter((p) => p.kind === 'show').length);
 
 	let picked = $state('');
 	let active = $derived(
@@ -64,8 +68,8 @@
 
 	// Per-theme colors for things drawn inside the WebGL canvas, where CSS variables don't reach.
 	const ink = {
-		light: { text: '#1a1206', halo: '#f8f4ea', partner: '#1f7a4a' },
-		dark: { text: '#efe6d2', halo: '#141311', partner: '#66e08f' }
+		light: { text: '#1a1206', halo: '#f8f4ea', partner: '#1f7a4a', show: '#c42839' },
+		dark: { text: '#efe6d2', halo: '#141311', partner: '#66e08f', show: '#ff5a47' }
 	};
 
 	let container: HTMLDivElement;
@@ -158,10 +162,10 @@
 		const pins = points([venue, ...places], (i) => {
 			const p = i === 0 ? null : places[i - 1];
 			return {
-				kind: p ? 'partner' : 'venue',
+				kind: p ? p.kind : 'venue',
 				name: p ? p.name : venue.name,
 				detail: p?.address ?? '',
-				// Lower sorts first: the venue, then memo picks, then other partners.
+				// Lower sorts first: the venue, then places the memo names, then the rest.
 				rank: p ? (highlight.includes(p.name) ? 1 : 2) : 0
 			};
 		});
@@ -204,10 +208,11 @@
 			type: 'circle',
 			source: 'pins',
 			paint: {
+				// Show venues are hollow rings, so they read apart from partners by shape, not only hue.
 				'circle-radius': ['match', ['get', 'kind'], 'venue', 7, 5],
-				'circle-color': ['match', ['get', 'kind'], 'venue', c.text, c.partner],
-				'circle-stroke-width': ['match', ['get', 'kind'], 'venue', 3, 2],
-				'circle-stroke-color': c.halo
+				'circle-color': ['match', ['get', 'kind'], 'venue', c.text, 'show', c.halo, c.partner],
+				'circle-stroke-width': ['match', ['get', 'kind'], 'venue', 3, 'show', 2.5, 2],
+				'circle-stroke-color': ['match', ['get', 'kind'], 'show', c.show, c.halo]
 			}
 		});
 		map.addLayer({
@@ -307,7 +312,7 @@
 	onafterprint={() => restore?.()}
 />
 
-<figure class="venue-map" class:has-snapshot={!!snapshot} style:--partner={ink[theme].partner}>
+<figure class="venue-map" class:has-snapshot={!!snapshot} style:--partner={ink[theme].partner} style:--show={ink[theme].show}>
 	{#if heatmaps.length > 1}
 		<div class="picker" role="radiogroup" aria-label="Show heatmap for">
 			{#each heatmaps as h (h.id)}
@@ -321,7 +326,7 @@
 		class="canvas"
 		bind:this={container}
 		role="img"
-		aria-label={`Map around ${venue.name}${active ? ` showing where ${active.label}'s fans over-index` : ''}${places.length ? ` and ${places.length} nearby co-promo places` : ''}.`}
+		aria-label={`Map around ${venue.name}${active ? ` showing where ${active.label}'s fans over-index` : ''}${partnerCount ? `, ${partnerCount} nearby co-promo places` : ''}${showCount ? `, ${showCount} venues with competing shows` : ''}.`}
 	>
 		{#if failed}<p class="failed">{failed}</p>{/if}
 	</div>
@@ -335,7 +340,8 @@
 			</span>
 		{/if}
 		<span class="key"><i class="dot venue" aria-hidden="true"></i>{venue.name}</span>
-		{#if places.length}<span class="key"><i class="dot partner" aria-hidden="true"></i>Co-promo place</span>{/if}
+		{#if partnerCount}<span class="key"><i class="dot partner" aria-hidden="true"></i>Co-promo place</span>{/if}
+		{#if showCount}<span class="key"><i class="dot show" aria-hidden="true"></i>Competing show</span>{/if}
 		{#if venueRank}
 			<span class="rank">
 				{active?.label}: the venue's cell ranks <strong>#{venueRank.rank}</strong> of {venueRank.of}
@@ -422,6 +428,11 @@
 		width: 9px;
 		height: 9px;
 		background: var(--partner);
+	}
+	.dot.show {
+		width: 7px;
+		height: 7px;
+		border: 2.5px solid var(--show);
 	}
 	.snapshot,
 	.attribution {

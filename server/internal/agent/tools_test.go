@@ -36,7 +36,7 @@ func runTool(t *testing.T, f *fakeQloo, name, input string) (any, error) {
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
 	q := qloo.New("test", qloo.WithBaseURL(srv.URL))
-	for _, tl := range toolset(q, DemoVenues[0]) {
+	for _, tl := range toolset(q, nil, DemoVenues[0]) {
 		if tl.name == name {
 			return tl.run(context.Background(), json.RawMessage(input))
 		}
