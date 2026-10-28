@@ -17,6 +17,10 @@ import (
 	"blastingroom/internal/qloo"
 )
 
+// ErrClaude wraps a failed Messages API call: a network error, an outage or
+// a rejected key. Its details are for the server log, not the visitor.
+var ErrClaude = errors.New("claude request failed")
+
 type Config struct {
 	Model    string
 	Effort   string // low | medium | high | xhigh | max
@@ -104,7 +108,7 @@ func (a *Agent) Run(ctx context.Context, req Request, emit func(Event)) (*Memo, 
 	for turn := 1; turn <= a.cfg.MaxTurns; turn++ {
 		resp, err := a.claude.Beta.Messages.New(ctx, params)
 		if err != nil {
-			return nil, fmt.Errorf("claude: %w", err)
+			return nil, fmt.Errorf("%w: %w", ErrClaude, err)
 		}
 		// History is append-only: the assistant turn goes back exactly as returned.
 		params.Messages = append(params.Messages, resp.ToParam())

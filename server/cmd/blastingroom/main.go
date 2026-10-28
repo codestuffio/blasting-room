@@ -47,12 +47,18 @@ func main() {
 		log.Warn("qloo: QLOO_API_KEY not set, serving synthetic mock data", "scenario", scenario)
 	}
 
+	dailyRuns, err := strconv.Atoi(env("BR_DAILY_RUNS", "100"))
+	if err != nil || dailyRuns < 0 {
+		log.Error("bad BR_DAILY_RUNS, want a whole number (0 for no cap)", "value", os.Getenv("BR_DAILY_RUNS"))
+		os.Exit(1)
+	}
 	srv := &api.Server{
 		QlooMock:       q.IsMock(),
 		MockScenario:   string(q.MockScenario()),
 		StaticDir:      env("STATIC_DIR", "../web/build"),
 		Log:            log,
 		ClientIPHeader: os.Getenv("BR_CLIENT_IP_HEADER"),
+		DailyRuns:      dailyRuns,
 	}
 	if srv.ClientIPHeader != "" {
 		log.Info("rate limit keyed on a proxy header", "header", srv.ClientIPHeader)

@@ -17,6 +17,8 @@ export interface Health {
 	agent_ready: boolean;
 	qloo_mode: 'mock' | 'live';
 	mock_scenario?: MockScenario;
+	// Present when the server caps runs per UTC day (BR_DAILY_RUNS).
+	runs_left_today?: number;
 }
 
 // Which synthetic data the mock serves (QLOO_MOCK_SCENARIO on the server).
