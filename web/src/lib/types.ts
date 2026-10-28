@@ -133,6 +133,8 @@ export interface ToolCall {
 	id: string;
 	ref: string;
 	name: string;
+	// The input in words, e.g. "Mock Artist 01 vs Mock Artist 02"; absent when there's nothing to say.
+	summary?: string;
 	input: unknown;
 }
 
@@ -143,6 +145,8 @@ export interface ToolResult {
 	error?: string;
 	duration_ms: number;
 	bytes: number;
+	// Entity names this result introduced (entity_id → name).
+	names?: Record<string, string>;
 }
 
 // Map data from local_heatmap, co_promo_partners and competing_shows (the "geo" event). It is

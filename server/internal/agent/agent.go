@@ -56,10 +56,11 @@ type Event struct {
 }
 
 type ToolCall struct {
-	ID    string          `json:"id"`
-	Ref   string          `json:"ref"` // Q1, Q2, … in call order; memo evidence cites it
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
+	ID      string          `json:"id"`
+	Ref     string          `json:"ref"` // Q1, Q2, … in call order; memo evidence cites it
+	Name    string          `json:"name"`
+	Summary string          `json:"summary,omitempty"` // the input in words, for the trace
+	Input   json.RawMessage `json:"input"`
 }
 
 type ToolResult struct {
@@ -69,6 +70,9 @@ type ToolResult struct {
 	Error      string `json:"error,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
 	Bytes      int    `json:"bytes"`
+	// Names are entity names this result introduced (entity_id → name), so
+	// the UI can label artists before the memo arrives.
+	Names map[string]string `json:"names,omitempty"`
 }
 
 // Run executes one booking task, calling emit for every step. It returns the
@@ -107,6 +111,7 @@ func (a *Agent) Run(ctx context.Context, req Request, emit func(Event)) (*Memo, 
 
 	emit(Event{Type: "start", Data: map[string]any{"venue": venue, "model": a.cfg.Model, "qloo_mock": a.qloo.IsMock()}})
 	refs := map[string]string{} // call ref → tool name, for checking memo evidence
+	seen := newNames()
 
 	for turn := 1; turn <= a.cfg.MaxTurns; turn++ {
 		resp, err := a.claude.Beta.Messages.New(ctx, params)
@@ -158,7 +163,7 @@ func (a *Agent) Run(ctx context.Context, req Request, emit func(Event)) (*Memo, 
 			return &memo, nil
 		}
 
-		results := a.runTools(ctx, calls, byName, refs, emit)
+		results := a.runTools(ctx, calls, byName, refs, seen, emit)
 		params.Messages = append(params.Messages, anthropic.NewBetaUserMessage(results...))
 	}
 	return nil, fmt.Errorf("no memo after %d turns", a.cfg.MaxTurns)
@@ -168,14 +173,14 @@ func (a *Agent) Run(ctx context.Context, req Request, emit func(Event)) (*Memo, 
 // results in call order, all destined for a single user message. Each call
 // gets the next ref in refs, and its result opens with a "ref Qn" line so
 // the memo's evidence can cite the exact call.
-func (a *Agent) runTools(ctx context.Context, calls []anthropic.BetaToolUseBlock, byName map[string]tool, refs map[string]string, emit func(Event)) []anthropic.BetaContentBlockParamUnion {
+func (a *Agent) runTools(ctx context.Context, calls []anthropic.BetaToolUseBlock, byName map[string]tool, refs map[string]string, seen *names, emit func(Event)) []anthropic.BetaContentBlockParamUnion {
 	results := make([]anthropic.BetaContentBlockParamUnion, len(calls))
 	var wg sync.WaitGroup
 	for i, c := range calls {
 		raw := json.RawMessage(c.JSON.Input.Raw())
 		ref := fmt.Sprintf("Q%d", len(refs)+1)
 		refs[ref] = c.Name
-		emit(Event{Type: "tool_call", Data: ToolCall{ID: c.ID, Ref: ref, Name: c.Name, Input: raw}})
+		emit(Event{Type: "tool_call", Data: ToolCall{ID: c.ID, Ref: ref, Name: c.Name, Summary: describeCall(c.Name, raw, seen), Input: raw}})
 		wg.Add(1)
 		go func(i int, c anthropic.BetaToolUseBlock, ref string) {
 			defer wg.Done()
@@ -209,6 +214,7 @@ func (a *Agent) runTools(ctx context.Context, calls []anthropic.BetaToolUseBlock
 			} else {
 				b, _ := json.Marshal(out)
 				content = string(b)
+				res.Names = seen.learn(out)
 			}
 			res.Bytes = len(content)
 			emit(Event{Type: "tool_result", Data: res})

@@ -59,7 +59,11 @@
 				<span class="led" class:ok={r?.ok} class:bad={r && !r.ok} class:live={!r && running}></span>
 				<div class="main">
 					<strong>{labels[e.data.name] ?? e.data.name}</strong>
-					<code>{brief(e.data.input)}</code>
+					{#if e.data.summary}
+						<span class="summary" title={brief(e.data.input)}>{e.data.summary}</span>
+					{:else}
+						<code>{brief(e.data.input)}</code>
+					{/if}
 					{#if r?.error}<p class="error">{r.error}</p>{/if}
 				</div>
 				{#if r}
@@ -165,6 +169,13 @@
 	strong {
 		font-weight: 600;
 		font-size: 0.92rem;
+	}
+	.summary {
+		display: block;
+		margin-top: 0.15rem;
+		color: var(--muted);
+		font-size: 0.82rem;
+		overflow-wrap: anywhere;
 	}
 	code {
 		display: block;

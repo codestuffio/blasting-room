@@ -14,8 +14,18 @@
 		date = '',
 		geo = [],
 		trends = [],
-		routes = []
-	}: { memo: Memo; venue: Venue; mode?: Mode; date?: string; geo?: Geo[]; trends?: Trend[]; routes?: Route[] } = $props();
+		routes = [],
+		runNames = {}
+	}: {
+		memo: Memo;
+		venue: Venue;
+		mode?: Mode;
+		date?: string;
+		geo?: Geo[];
+		trends?: Trend[];
+		routes?: Route[];
+		runNames?: Record<string, string>;
+	} = $props();
 
 	// The headliner's tour: matched by Qloo id, else by name; the latest lookup wins.
 	let route = $derived(
@@ -69,17 +79,35 @@
 		trends.some((t) => t.series.some((s) => s.points.length > 1 && chartPicks.some((p) => p.entity_id === s.entity_id)))
 	);
 
-	let names = $derived(
-		Object.fromEntries(
-			[memo.headliner, memo.support, ...memo.alternates].map((p) => [p.entity_id, p.name])
-		)
-	);
+	// Every artist the run named, with the memo's own spelling winning.
+	let names = $derived({
+		...runNames,
+		...Object.fromEntries([memo.headliner, memo.support, ...memo.alternates].map((p) => [p.entity_id, p.name]))
+	});
 	// Map labels the memo names win collisions: its co-promo places and the venues of competing shows.
 	let highlight = $derived([
 		...memo.co_promo.filter((c) => c.kind === 'place').map((c) => c.name),
 		...(memo.competing_shows ?? []).map((s) => s.venue)
 	]);
 	let clashes = $derived(memo.competing_shows ?? []);
+
+	let showRouting = $derived(hasPick && !!routing && routing.fit !== 'not_checked');
+
+	// Jump links to the sections this memo has, in page order.
+	let jumps = $derived(
+		[
+			{ id: 'memo-offer', label: showDeal ? 'Offer' : 'No offer', on: showDeal || !!memo.deal?.walk_away },
+			{ id: 'memo-routing', label: 'Tour', on: showRouting },
+			{ id: 'memo-fans', label: 'Fans', on: geo.length > 0 },
+			{ id: 'memo-momentum', label: 'Momentum', on: hasTrend },
+			{ id: 'memo-audience', label: 'Audience', on: true },
+			{ id: 'memo-copromo', label: 'Co-promo', on: memo.co_promo.length > 0 },
+			{ id: 'memo-shows', label: 'Shows nearby', on: clashes.length > 0 },
+			{ id: 'memo-risks', label: 'Risks', on: memo.risks.length + memo.alternates.length > 0 },
+			{ id: 'memo-evidence', label: 'Evidence', on: memo.evidence.length > 0 }
+		].filter((j) => j.on)
+	);
+
 
 	let linked = $derived(memo.evidence.filter((ev) => ev.ref).length);
 
@@ -160,17 +188,23 @@
 	</section>
 	{/if}
 
+	<nav class="jump" aria-label="Memo sections">
+		{#each jumps as j (j.id)}<a href={`#${j.id}`}>{j.label}</a>{/each}
+	</nav>
+
 	{#if showDeal}
-		<DealCard deal={memo.deal} {venue} headliner={memo.headliner.name} support={memo.support.name} {date} />
+		<div id="memo-offer" class="anchor">
+			<DealCard deal={memo.deal} {venue} headliner={memo.headliner.name} support={memo.support.name} {date} />
+		</div>
 	{:else if memo.deal?.walk_away}
-		<section class="no-offer">
+		<section id="memo-offer" class="no-offer anchor">
 			<span class="tape">No offer</span>
 			<p><span class="label">What would change it</span> {memo.deal.walk_away}</p>
 		</section>
 	{/if}
 
-	{#if hasPick && routing && routing.fit !== 'not_checked'}
-		<section class="routing">
+	{#if showRouting}
+		<section id="memo-routing" class="routing anchor">
 			<div class="routing-head">
 				<h3>Where they'll be</h3>
 				<span class="fit"><span class={`led ${fitLed[routing.fit]}`}></span>{fitLabel[routing.fit]}</span>
@@ -181,21 +215,21 @@
 	{/if}
 
 	{#if geo.length}
-		<section>
+		<section id="memo-fans" class="anchor">
 			<h3>Where the fans are</h3>
 			<VenueMap bind:this={mapView} {venue} {geo} {names} focus={memo.headliner.entity_id} {highlight} />
 		</section>
 	{/if}
 
 	{#if hasTrend}
-		<section class="momentum">
+		<section id="memo-momentum" class="momentum anchor">
 			<h3>Momentum</h3>
 			<p>{memo.momentum}</p>
 			<MomentumChart {trends} picks={chartPicks} />
 		</section>
 	{/if}
 
-	<section class="grid">
+	<section id="memo-audience" class="grid anchor">
 		<div>
 			<h3>{hasPick ? 'Why it works in this room' : 'Local fit'}</h3>
 			<p>{memo.local_fit}</p>
@@ -220,7 +254,7 @@
 	</section>
 
 	{#if memo.co_promo.length}
-		<section>
+		<section id="memo-copromo" class="anchor">
 			<h3>Co-promo plan</h3>
 			<ul class="partners">
 				{#each memo.co_promo as c, i (i)}
@@ -235,7 +269,7 @@
 	{/if}
 
 	{#if clashes.length}
-		<section>
+		<section id="memo-shows" class="anchor">
 			<h3>Competing shows nearby</h3>
 			<ul class="clashes">
 				{#each clashes as s, i (i)}
@@ -250,7 +284,7 @@
 		</section>
 	{/if}
 
-	<section class="grid">
+	<section id="memo-risks" class="grid anchor">
 		{#if memo.alternates.length}
 			<div>
 				<h3>Alternates</h3>
@@ -270,7 +304,7 @@
 	</section>
 
 	{#if memo.evidence.length}
-		<details bind:open={evidenceOpen}>
+		<details id="memo-evidence" class="anchor" bind:open={evidenceOpen}>
 			<summary>
 				Evidence trail ({memo.evidence.length} claims{linked < memo.evidence.length ? `, ${linked} traced to a call` : ''})
 			</summary>
@@ -480,6 +514,39 @@
 		grid-column: 2;
 		color: var(--muted);
 	}
+	/* Sticky jump bar; anchors leave room for it when scrolled to. */
+	.jump {
+		position: sticky;
+		top: 0;
+		z-index: 3;
+		display: flex;
+		gap: 0.35rem;
+		overflow-x: auto;
+		padding: 0.5rem 0;
+		margin: -0.5rem 0;
+		background: var(--bg);
+		scrollbar-width: none;
+	}
+	.jump a {
+		flex: none;
+		padding: 0.3rem 0.7rem;
+		border: 1px solid var(--line);
+		border-radius: 999px;
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+		color: var(--muted);
+		text-decoration: none;
+	}
+	.jump a:hover,
+	.jump a:focus-visible {
+		color: var(--text);
+		border-color: var(--accent);
+	}
+	.anchor {
+		scroll-margin-top: 3.25rem;
+	}
 	.no-offer {
 		display: grid;
 		justify-items: start;
@@ -588,6 +655,9 @@
 		vertical-align: top;
 	}
 	@media print {
+		.jump {
+			display: none;
+		}
 		/* Block flow fragments across pages more predictably than grid. */
 		.memo {
 			display: block;

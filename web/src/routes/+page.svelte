@@ -6,6 +6,7 @@
 	import MemoView from '#lib/components/MemoView.svelte';
 	import VenueMap from '#lib/components/VenueMap.svelte';
 	import Logo from '#lib/components/Logo.svelte';
+	import RunSheet from '#lib/components/RunSheet.svelte';
 
 	let health = $state<Health | null>(null);
 	let venues = $state<Venue[]>([]);
@@ -23,6 +24,30 @@
 		empty: 'every Qloo call returns nothing'
 	};
 
+	// Ready-made scenarios for a first visit. They fill the form; they never start a run.
+	// The vet examples lean on live tour data, so each disappears once its date has passed.
+	const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local
+	function thursdayAfter(days: number): string {
+		const d = new Date();
+		d.setDate(d.getDate() + days + ((4 - ((d.getDay() + days) % 7) + 7) % 7));
+		return d.toLocaleDateString('en-CA');
+	}
+	type Example = { title: string; detail: string; venue: string; mode: Mode; date: string; artist?: string; ask?: string };
+	const examples: Example[] = [
+		{ title: 'Fill a Thursday in Logan Square', detail: 'The Lantern Room · three weeks out', venue: 'lantern', mode: 'fill_date', date: thursdayAfter(21) },
+		{ title: 'Vet Wednesday at The Lantern Room', detail: 'Nov 19 · their ask $2,500 flat', venue: 'lantern', mode: 'vet_offer', date: '2026-11-19', artist: 'Wednesday', ask: '$2,500 flat' },
+		{ title: 'Vet Wednesday at Copperline', detail: 'Nov 15 · their ask $3,000 flat', venue: 'copperline', mode: 'vet_offer', date: '2026-11-15', artist: 'Wednesday', ask: '$3,000 flat' }
+	].filter((e) => e.date >= today) as Example[];
+
+	function useExample(e: Example) {
+		venueId = e.venue;
+		mode = e.mode;
+		date = e.date;
+		offerArtist = e.artist ?? '';
+		ask = e.ask ?? '';
+		notes = '';
+	}
+
 	let events = $state<TraceEvent[]>([]);
 	// The mode of the run on screen, which the form may have moved on from.
 	let runMode = $state<Mode>('fill_date');
@@ -36,6 +61,10 @@
 	let geo = $derived(events.flatMap((e) => (e.type === 'geo' ? [e.data] : [])));
 	let trends = $derived(events.flatMap((e) => (e.type === 'trend' ? [e.data] : [])));
 	let routes = $derived(events.flatMap((e) => (e.type === 'route' ? [e.data] : [])));
+	// Entity names learned from tool results, so artists have names before the memo arrives.
+	let runNames = $derived(
+		Object.assign({}, ...events.flatMap((e) => (e.type === 'tool_result' && e.data.names ? [e.data.names] : []))) as Record<string, string>
+	);
 	let spent = $derived(health?.runs_left_today === 0);
 	let canRun = $derived(
 		!!health?.agent_ready && !spent && !!venue && !running && (mode === 'fill_date' || offerArtist.trim() !== '')
@@ -150,12 +179,26 @@
 					<input type="radio" name="mode" value="vet_offer" bind:group={mode} /> Vet an offer
 				</label>
 			</div>
+			{#if examples.length}
+				<div class="examples">
+					<span class="label">Try an example</span>
+					{#each examples as e (e.title)}
+						<button type="button" class="example" onclick={() => useExample(e)} disabled={running}>
+							<strong>{e.title}</strong>
+							<span>{e.detail}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
 			<div class="fields">
 				{#if mode === 'vet_offer'}
 					<label>Artist offered <input bind:value={offerArtist} placeholder="e.g. the band an agent pitched you" required /></label>
 					<label>Their ask <input bind:value={ask} placeholder="e.g. $2,000 flat, or $1,500 vs 85%" /></label>
 				{/if}
-				<label>Date <input type="date" bind:value={date} /></label>
+				<label>
+					Date <input type="date" bind:value={date} min={today} />
+					{#if !date}<small class="hint">Add one to check same-night shows and the act's tour.</small>{/if}
+				</label>
 				<label class="wide">Notes for the agent <input bind:value={notes} placeholder="e.g. Thursday, want a younger crowd, under $20 tickets" /></label>
 			</div>
 			<div class="actions">
@@ -164,6 +207,12 @@
 					{running ? 'Working…' : 'Run the booking agent'}
 				</button>
 				{#if running}<button type="button" class="ghost" onclick={() => controller?.abort()}>Stop</button>{/if}
+				{#if !events.length && !running && !spent}
+					<p class="promise">
+						You get a booking memo: who to book, what to offer, how the date fits their tour, competing shows, who's coming,
+						a co-promo plan, and the data behind every claim. About a minute.
+					</p>
+				{/if}
 				{#if spent}
 					<p class="budget">Today's demo runs are used up. The agent is back after midnight UTC.</p>
 				{:else if health?.runs_left_today !== undefined && health.runs_left_today <= 10}
@@ -182,12 +231,12 @@
 			</section>
 			<section class="memo-col">
 				{#if memo && venue}
-					<MemoView {memo} {venue} {geo} {trends} {routes} mode={runMode} date={runDate} />
+					<MemoView {memo} {venue} {geo} {trends} {routes} {runNames} mode={runMode} date={runDate} />
 				{:else}
+					<RunSheet {events} {running} />
 					{#if venue && geo.length}
-						<VenueMap {venue} {geo} />
+						<VenueMap {venue} {geo} names={runNames} />
 					{/if}
-					<div class="placeholder">The booking memo appears here when the agent finishes.</div>
 				{/if}
 			</section>
 		</main>
@@ -413,6 +462,51 @@
 		opacity: 0.45;
 		cursor: not-allowed;
 	}
+	.examples {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		margin-bottom: 1rem;
+	}
+	.examples .label {
+		flex-basis: 100%;
+	}
+	button.example {
+		display: grid;
+		justify-items: start;
+		gap: 0.1rem;
+		min-height: 44px;
+		padding: 0.45rem 0.8rem;
+		text-align: left;
+		border: 1px solid var(--line);
+		border-radius: 8px;
+		background: var(--recess);
+		color: var(--text);
+	}
+	button.example:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	button.example strong {
+		font-size: 0.85rem;
+		font-weight: 600;
+	}
+	button.example span {
+		font-family: var(--font-mono);
+		font-size: 0.72rem;
+		color: var(--muted);
+	}
+	.hint {
+		color: var(--accent-text);
+		font-size: 0.78rem;
+	}
+	.promise {
+		flex: 1 1 18rem;
+		align-self: center;
+		margin: 0;
+		color: var(--muted);
+		font-size: 0.85rem;
+	}
 	.budget {
 		align-self: center;
 		margin: 0;
@@ -440,14 +534,6 @@
 	.memo-col {
 		display: grid;
 		gap: 1rem;
-	}
-	.placeholder {
-		padding: 3rem 1rem;
-		text-align: center;
-		color: var(--muted);
-		border: 1px dashed var(--line);
-		border-radius: 14px;
-		background: var(--recess);
 	}
 	footer {
 		color: var(--muted);
