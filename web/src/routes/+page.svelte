@@ -13,6 +13,7 @@
 	let mode = $state<Mode>('fill_date');
 	let date = $state('');
 	let offerArtist = $state('');
+	let ask = $state('');
 	let notes = $state('');
 
 	const scenarioNote = {
@@ -25,6 +26,7 @@
 	let events = $state<TraceEvent[]>([]);
 	// The mode of the run on screen, which the form may have moved on from.
 	let runMode = $state<Mode>('fill_date');
+	let runDate = $state('');
 	let memo = $state<Memo | null>(null);
 	let running = $state(false);
 	let error = $state('');
@@ -33,6 +35,7 @@
 	let venue = $derived(venues.find((v) => v.id === venueId));
 	let geo = $derived(events.flatMap((e) => (e.type === 'geo' ? [e.data] : [])));
 	let trends = $derived(events.flatMap((e) => (e.type === 'trend' ? [e.data] : [])));
+	let routes = $derived(events.flatMap((e) => (e.type === 'route' ? [e.data] : [])));
 	let spent = $derived(health?.runs_left_today === 0);
 	let canRun = $derived(
 		!!health?.agent_ready && !spent && !!venue && !running && (mode === 'fill_date' || offerArtist.trim() !== '')
@@ -53,13 +56,14 @@
 		events = [];
 		memo = null;
 		runMode = mode;
+		runDate = date;
 		error = '';
 		running = true;
 		controller = new AbortController();
 		const t0 = performance.now();
 		try {
 			await runAgent(
-				{ venue_id: venueId, mode, date: date || undefined, offer_artist: offerArtist || undefined, notes: notes || undefined },
+				{ venue_id: venueId, mode, date: date || undefined, offer_artist: offerArtist || undefined, ask: (mode === 'vet_offer' && ask) || undefined, notes: notes || undefined },
 				(e) => {
 					events.push({ ...e, at: performance.now() - t0 });
 					if (e.type === 'memo') memo = e.data;
@@ -149,6 +153,7 @@
 			<div class="fields">
 				{#if mode === 'vet_offer'}
 					<label>Artist offered <input bind:value={offerArtist} placeholder="e.g. the band an agent pitched you" required /></label>
+					<label>Their ask <input bind:value={ask} placeholder="e.g. $2,000 flat, or $1,500 vs 85%" /></label>
 				{/if}
 				<label>Date <input type="date" bind:value={date} /></label>
 				<label class="wide">Notes for the agent <input bind:value={notes} placeholder="e.g. Thursday, want a younger crowd, under $20 tickets" /></label>
@@ -177,7 +182,7 @@
 			</section>
 			<section class="memo-col">
 				{#if memo && venue}
-					<MemoView {memo} {venue} {geo} {trends} mode={runMode} />
+					<MemoView {memo} {venue} {geo} {trends} {routes} mode={runMode} date={runDate} />
 				{:else}
 					{#if venue && geo.length}
 						<VenueMap {venue} {geo} />

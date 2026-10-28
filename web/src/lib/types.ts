@@ -10,6 +10,8 @@ export interface Venue {
 	capacity: number;
 	vibe: string;
 	seeds: string[];
+	house_costs: number;
+	bar_net_per_head: number;
 }
 
 export interface Health {
@@ -33,6 +35,7 @@ export interface RunRequest {
 	mode: Mode;
 	date?: string;
 	offer_artist?: string;
+	ask?: string;
 	notes?: string;
 }
 
@@ -54,12 +57,76 @@ export interface Memo {
 	momentum: string;
 	audience: { summary: string; age_skew: string; ticket_tier: 'budget' | 'standard' | 'premium' };
 	co_promo: { kind: 'place' | 'podcast' | 'brand'; name: string; idea: string }[];
+	deal: Deal;
+	routing: { fit: RouteFit; summary: string };
 	risks: string[];
 	// Nearby shows the agent judged against the booking; empty when none compete or there was no check.
 	competing_shows: { name: string; venue: string; date: string; threat: 'high' | 'medium' | 'low'; note: string }[];
 	alternates: { name: string; entity_id: string; reason: string }[];
 	// ref is the trace call ("Q3") behind the claim; empty when the server could not match it to one.
 	evidence: { claim: string; tool: string; ref: string }[];
+}
+
+// The offer. The model sets the terms; math is computed on the server from
+// the terms and the venue's costs, and is absent on a pass with no price.
+export interface Deal {
+	guarantee: number;
+	backend_pct: number;
+	support_fee: number;
+	ticket_price_advance: number;
+	ticket_price_door: number;
+	expected_tickets: number;
+	terms: string;
+	walk_away: string;
+	rationale: string;
+	math?: DealMath;
+}
+
+export interface DealMath {
+	capacity: number;
+	house_costs: number;
+	bar_net_per_head: number;
+	split_point: number;
+	break_even_tickets: number;
+	break_even_with_bar: number;
+	scenarios: {
+		label: string;
+		tickets: number;
+		gross: number;
+		artist_total: number;
+		venue_door: number;
+		venue_bar: number;
+		venue_total: number;
+	}[];
+}
+
+export type RouteFit =
+	| 'on_the_way'
+	| 'detour'
+	| 'off_route'
+	| 'already_in_market'
+	| 'already_booked'
+	| 'no_tour_data'
+	| 'not_checked';
+
+// An act's tour from tour_dates (the "route" event). For the UI only; the model sees a summary.
+export interface RouteStop {
+	date: string;
+	venue: string;
+	city: string;
+	region?: string;
+	miles: number;
+}
+
+export interface Route {
+	tool_call_id: string;
+	artist: string;
+	entity_id?: string;
+	venue: GeoPoint;
+	date?: string;
+	fit: RouteFit;
+	stops: RouteStop[];
+	windows: { from: string; to: string; after?: string; before?: string; detour_miles: number }[];
 }
 
 export interface ToolCall {
@@ -135,6 +202,7 @@ export type AgentEvent =
 	| { type: 'tool_result'; data: ToolResult }
 	| { type: 'geo'; data: Geo }
 	| { type: 'trend'; data: Trend }
+	| { type: 'route'; data: Route }
 	| { type: 'memo'; data: Memo }
 	| { type: 'error'; data: { message: string } }
 	| { type: 'done'; data?: { turns: number } };

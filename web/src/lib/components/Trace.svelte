@@ -26,6 +26,8 @@
 		audience_demographics: 'Audience demographics',
 		co_promo_partners: 'Co-promo partners',
 		competing_shows: 'Competing shows',
+		tour_dates: 'Tour routing',
+		price_deal: 'Price the deal',
 		submit_booking_memo: 'Write booking memo'
 	};
 

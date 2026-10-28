@@ -51,7 +51,7 @@ func New(claude anthropic.Client, q *qloo.Client, cfg Config) *Agent {
 
 // Event is streamed to the UI as the agent works.
 type Event struct {
-	Type string `json:"type"` // start | progress | text | tool_call | tool_result | geo | trend | memo | error | done
+	Type string `json:"type"` // start | progress | text | tool_call | tool_result | geo | trend | route | memo | error | done
 	Data any    `json:"data,omitempty"`
 }
 
@@ -152,6 +152,7 @@ func (a *Agent) Run(ctx context.Context, req Request, emit func(Event)) (*Memo, 
 				return nil, fmt.Errorf("memo did not match schema: %w", err)
 			}
 			checkMemo(&memo, refs)
+			memo.Deal.Math = dealMath(venue, memo.Deal)
 			emit(Event{Type: "memo", Data: memo})
 			emit(Event{Type: "done", Data: map[string]any{"turns": turn}})
 			return &memo, nil
@@ -193,6 +194,12 @@ func (a *Agent) runTools(ctx context.Context, calls []anthropic.BetaToolUseBlock
 				if g.trend != nil {
 					g.trend.ToolCallID = c.ID
 					emit(Event{Type: "trend", Data: g.trend})
+				}
+			case withRoute:
+				out = g.model
+				if g.route != nil {
+					g.route.ToolCallID = c.ID
+					emit(Event{Type: "route", Data: g.route})
 				}
 			}
 			var content string
