@@ -18,6 +18,7 @@ type Memo struct {
 	Audience   Audience     `json:"audience"`
 	CoPromo    []Partner    `json:"co_promo"`
 	Risks      []string     `json:"risks"`
+	Shows      []Clash      `json:"competing_shows"`
 	Alternates []Alternate  `json:"alternates"`
 	Evidence   []Provenance `json:"evidence"`
 }
@@ -38,6 +39,15 @@ type Partner struct {
 	Kind string `json:"kind"`
 	Name string `json:"name"`
 	Idea string `json:"idea"`
+}
+
+// Clash is a nearby show the agent judged against the booking.
+type Clash struct {
+	Name   string `json:"name"`
+	Venue  string `json:"venue"`
+	Date   string `json:"date"`
+	Threat string `json:"threat"`
+	Note   string `json:"note"`
 }
 
 type Alternate struct {
@@ -115,6 +125,13 @@ var memoProperties = map[string]any{
 		"idea": str("One concrete activation idea"),
 	})),
 	"risks": arr(str("A risk or data gap")),
+	"competing_shows": arr(obj(map[string]any{
+		"name":   str("Show name exactly as returned by competing_shows"),
+		"venue":  str("Its venue"),
+		"date":   str("Its local date, YYYY-MM-DD"),
+		"threat": enum("How hard it competes for this booking's crowd, from genre overlap, distance and night", "high", "medium", "low"),
+		"note":   str("One line on why"),
+	})),
 	"alternates": arr(obj(map[string]any{
 		"name":      str("Artist name"),
 		"entity_id": str("Qloo entity_id"),

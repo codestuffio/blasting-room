@@ -95,6 +95,10 @@
 					<span class="led" class:ok={health.qloo_mode === 'live'} class:on={health.qloo_mode === 'mock'}></span>
 					Qloo {health.qloo_mode === 'mock' ? 'mock' : 'live'}
 				</span>
+				<span class="lamp" title={health.shows_check ? 'Competing shows from Ticketmaster' : 'No Ticketmaster key: competing shows are not checked'}>
+					<span class="led" class:ok={health.shows_check}></span>
+					Shows {health.shows_check ? 'live' : 'off'}
+				</span>
 				<span class="lamp">
 					<span class="led" class:ok={health.agent_ready} class:bad={!health.agent_ready}></span>
 					Agent {health.agent_ready ? 'ready' : 'off'}

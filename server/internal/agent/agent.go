@@ -15,6 +15,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/shared/constant"
 
 	"blastingroom/internal/qloo"
+	"blastingroom/internal/ticketmaster"
 )
 
 // ErrClaude wraps a failed Messages API call: a network error, an outage or
@@ -25,6 +26,8 @@ type Config struct {
 	Model    string
 	Effort   string // low | medium | high | xhigh | max
 	MaxTurns int
+	// Shows looks up competing shows; nil when no Ticketmaster key is set.
+	Shows *ticketmaster.Client
 }
 
 type Agent struct {
@@ -75,7 +78,7 @@ func (a *Agent) Run(ctx context.Context, req Request, emit func(Event)) (*Memo, 
 	if !ok {
 		return nil, fmt.Errorf("unknown venue %q", req.VenueID)
 	}
-	tools := toolset(a.qloo, venue)
+	tools := toolset(a.qloo, a.cfg.Shows, venue)
 	byName := make(map[string]tool, len(tools))
 	for _, t := range tools {
 		byName[t.name] = t

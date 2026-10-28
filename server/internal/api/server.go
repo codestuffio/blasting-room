@@ -40,6 +40,8 @@ type Server struct {
 	// DailyRuns caps agent runs per UTC day across all visitors, bounding
 	// the Anthropic bill for the public demo. Zero means no cap.
 	DailyRuns int
+	// ShowsCheck reports whether competing-show lookups (Ticketmaster) are on.
+	ShowsCheck bool
 
 	slots   chan struct{} // caps concurrent agent runs
 	limiter *ipLimiter
@@ -69,6 +71,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 		"ok":          true,
 		"agent_ready": s.Runner != nil,
 		"qloo_mode":   map[bool]string{true: "mock", false: "live"}[s.QlooMock],
+		"shows_check": s.ShowsCheck,
 	}
 	if s.QlooMock {
 		body["mock_scenario"] = s.MockScenario

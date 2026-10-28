@@ -16,6 +16,8 @@ export interface Health {
 	ok: boolean;
 	agent_ready: boolean;
 	qloo_mode: 'mock' | 'live';
+	// Whether competing-show lookups (Ticketmaster) are configured.
+	shows_check: boolean;
 	mock_scenario?: MockScenario;
 	// Present when the server caps runs per UTC day (BR_DAILY_RUNS).
 	runs_left_today?: number;
@@ -53,6 +55,8 @@ export interface Memo {
 	audience: { summary: string; age_skew: string; ticket_tier: 'budget' | 'standard' | 'premium' };
 	co_promo: { kind: 'place' | 'podcast' | 'brand'; name: string; idea: string }[];
 	risks: string[];
+	// Nearby shows the agent judged against the booking; empty when none compete or there was no check.
+	competing_shows: { name: string; venue: string; date: string; threat: 'high' | 'medium' | 'low'; note: string }[];
 	alternates: { name: string; entity_id: string; reason: string }[];
 	// ref is the trace call ("Q3") behind the claim; empty when the server could not match it to one.
 	evidence: { claim: string; tool: string; ref: string }[];
@@ -74,7 +78,7 @@ export interface ToolResult {
 	bytes: number;
 }
 
-// Map data from local_heatmap and co_promo_partners (the "geo" event). It is
+// Map data from local_heatmap, co_promo_partners and competing_shows (the "geo" event). It is
 // for the UI only; the model sees compact summaries.
 export interface GeoPoint {
 	name: string;
@@ -98,7 +102,8 @@ export interface GeoPlace {
 
 export interface Geo {
 	tool_call_id: string;
-	kind: 'heatmap' | 'partners';
+	// shows: one place per venue with nearby shows; its address lists them.
+	kind: 'heatmap' | 'partners' | 'shows';
 	entity_ids: string[];
 	venue: GeoPoint;
 	cells?: HeatCell[];

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"blastingroom/internal/qloo"
+	"blastingroom/internal/ticketmaster"
 )
 
 // tool is one capability exposed to Claude. run receives the raw JSON input
@@ -27,9 +28,10 @@ type tool struct {
 
 const memoToolName = "submit_booking_memo"
 
-// toolset binds the Qloo tools to one venue so the agent never has to pass
-// coordinates or locality strings around itself.
-func toolset(q *qloo.Client, v Venue) []tool {
+// toolset binds the Qloo tools, and the Ticketmaster show check, to one venue
+// so the agent never has to pass coordinates or locality strings around
+// itself. shows is nil when no Ticketmaster key is configured.
+func toolset(q *qloo.Client, shows *ticketmaster.Client, v Venue) []tool {
 	return []tool{
 		{
 			name:        "resolve_entity",
@@ -313,6 +315,7 @@ func toolset(q *qloo.Client, v Venue) []tool {
 				return withGeo{entitiesOrNote(res.Entities, hint), placesGeo(v, in.EntityIDs, res.Entities)}, nil
 			},
 		},
+		competingShowsTool(shows, v),
 		{
 			name:        memoToolName,
 			description: "Submit the final booking memo. Call exactly once, after the evidence is gathered.",

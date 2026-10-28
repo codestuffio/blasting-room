@@ -13,11 +13,12 @@ Svelte SPA ──POST /api/runs──► Go server ──► Claude (tool-use lo
      ▲                              │              │
      └──── SSE: trace + memo ◄──────┘              ▼
                                          Qloo tools (hackathon API)
+                                         + Ticketmaster show check
 ```
 
-A Go tool-use loop on Claude drives a set of Qloo tools:
+A Go tool-use loop on Claude drives a set of Qloo tools, plus one Ticketmaster check:
 
-| Tool | Qloo endpoint | Purpose |
+| Tool | Endpoint | Purpose |
 |---|---|---|
 | `resolve_entity` | `/search` | name → entity ID |
 | `find_genre_tags` | `/v2/tags` | genre words → tag URNs |
@@ -28,6 +29,7 @@ A Go tool-use loop on Claude drives a set of Qloo tools:
 | `compare_audiences` | `/v2/analysis/compare` | headliner/support overlap |
 | `audience_demographics` | `/v2/insights` (`urn:demographics`) | age/gender skew → ticket tier |
 | `co_promo_partners` | `/v2/insights` (cross-domain place/podcast/brand) | nearby bars, podcasts, sponsors |
+| `competing_shows` | Ticketmaster Discovery `/events` (music, 5 mi, the date ±1 night) | shows that would pull the same crowd the same night, pinned on the map |
 | `submit_booking_memo` | — | strict-schema final memo |
 
 The UI streams every tool call and result as it happens, then shows the memo.
@@ -68,6 +70,7 @@ That runs `go vet`, the Go tests and `svelte-check`.
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Required for agent runs; without it the UI loads but runs are disabled |
 | `QLOO_API_KEY` | — | Empty = synthetic mock data |
+| `TICKETMASTER_API_KEY` | — | Discovery API consumer key (the secret isn't used). Empty = competing shows aren't checked, and memos say so |
 | `QLOO_BASE_URL` | `https://hackathon.api.qloo.com` | Hackathon keys only work on this host |
 | `QLOO_MOCK_SCENARIO` | `full` | Mock only. `sparse`: short lists, many artists missing heatmap/trend/demographics. `degraded`: heatmap down, some calls fail with 503. `empty`: every call returns nothing, like Qloo's silent failures |
 | `BR_MODEL` | `claude-opus-5-5` | |

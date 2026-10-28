@@ -6,7 +6,7 @@ import "blastingroom/internal/qloo"
 // goes to the model, whose tool results stay compact summaries.
 type Geo struct {
 	ToolCallID string     `json:"tool_call_id"`
-	Kind       string     `json:"kind"` // heatmap | partners
+	Kind       string     `json:"kind"` // heatmap | partners | shows
 	EntityIDs  []string   `json:"entity_ids"`
 	Venue      GeoPoint   `json:"venue"`
 	Cells      []HeatCell `json:"cells,omitempty"`
