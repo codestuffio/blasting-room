@@ -22,3 +22,6 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Devpost gallery screenshots (they show Qloo-derived data; never commit)
+devpost-assets/
