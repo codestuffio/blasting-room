@@ -16,10 +16,19 @@ Copy for the Devpost project page, the submission form fields, a demo-video scri
 > Live Nation has a data team. The 300-cap club down the street has a gut feeling. Blasting Room is an AI talent buyer: who to book, what to offer, and why, grounded in Qloo's taste graph.
 
 **Try it out:**
-- Live demo: `[DEMO URL]`
+- Live demo: https://blastingroom.codestuff.io
 - Code: https://github.com/codestuffio/blasting-room (MIT)
 
 **Built with:** `qloo`, `claude`, `anthropic`, `go`, `svelte`, `sveltekit`, `typescript`, `maplibre`, `openfreemap`, `ticketmaster-discovery-api`, `docker`, `coolify`, `cloudflare`
+
+**The hackathon's own questions:**
+
+| Question | Answer |
+|---|---|
+| When did you begin your project? | October 14, 2026 (the first commit), during the submission window |
+| The public URL to your project | https://blastingroom.codestuff.io |
+| Link to your PUBLIC code repo | https://github.com/codestuffio/blasting-room |
+| If this was an existing project, how did you upgrade it for Qloo? | Optional. Leave blank: this is a new project, built for the hackathon. |
 
 ---
 
@@ -183,11 +192,11 @@ The captured images are in `devpost-assets/`, which is gitignored because they s
 - [ ] README: the live demo link at the top.
 
 **Live demo**
-- [ ] `main` is deployed in Coolify, and the app log shows `qloo: live` and `ticketmaster: live`.
-- [ ] Coolify env has `ANTHROPIC_API_KEY`, `QLOO_API_KEY`, `TICKETMASTER_API_KEY` (consumer key) and `BR_CLIENT_IP_HEADER=CF-Connecting-IP`.
+- [x] `main` is deployed in Coolify, and the app log shows `qloo: live` and `ticketmaster: live`.
+- [x] Coolify env has `ANTHROPIC_API_KEY`, `QLOO_API_KEY`, `TICKETMASTER_API_KEY` (consumer key) and `BR_CLIENT_IP_HEADER=CF-Connecting-IP`.
 - [ ] `BR_DAILY_RUNS` is set to a daily spend you're comfortable with (default 100).
-- [ ] Run both vet examples and one fill on the live site, and check the memo, map, offer and tour chart.
-- [ ] **Cloudflare Access off** from submission until at least Nov 16 (end of judging), better Nov 23 (winners). Check in a private window that the URL loads without a sign-in.
+- [x] Run both vet examples and one fill on the live site, and check the memo, map, offer and tour chart.
+- [ ] **Keep the demo open** from submission through Nov 5, when judging ends (Nov 2–5) and winners are announced. No Cloudflare Access on it. Check in a private window that the URL loads without a sign-in.
 
 **Devpost**
 - [ ] Paste the fields and "About the project" above.

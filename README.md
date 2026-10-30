@@ -4,6 +4,8 @@
 
 Ask "who should I book for a Thursday in March?" and get back a booking memo. It names a headliner and support act whose fans over-index in your neighborhood. It says who's likely to buy tickets and suggests a co-promo plan, and every claim carries an evidence trail back to the Qloo call that supports it.
 
+**Live demo: https://blastingroom.codestuff.io** (runs are capped per day while the demo is public).
+
 Built for the [Qloo Agentic Hackathon](https://qloo.devpost.com). Product plan: [docs/BLASTING_ROOM.md](docs/BLASTING_ROOM.md).
 
 ## How it works
