@@ -7,7 +7,7 @@ Compiled 2026-10-14. Sources are listed at the bottom.
 | | |
 |---|---|
 | Submission window | Sep 30 → **Oct 30, 2026, 11:45pm EDT** (16 days from today) |
-| Judging / winners | Judging Nov 2–16; winners announced ~Nov 23 |
+| Judging / winners | Judging Nov 2–5; winners announced Nov 5 (Devpost key dates, checked Oct 30) |
 | Prizes | $15K / $6K / $4K, plus **Jason Calacanis personally invests $25K** in his favorite entry |
 | Participants | ~1,400 as of Oct 14 (the 2025 event ended with 2,847 participants and 343 projects) |
 | Must ship | Live, externally hosted demo usable end to end; public repo with an OSS license **visible in the repo's About section**; text description. No video required, but the rules still say judges may score on text, images and video, and may use AI-driven analysis, so include good screenshots and an optional video. |

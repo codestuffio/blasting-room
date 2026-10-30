@@ -19,7 +19,7 @@ Cloudflare handles TLS. Everything after the tunnel is plain HTTP on the homelab
    - Ports Exposes: `8080`
 4. **Domain:**
    - Enter it as `http://blastingroom.example.com`, with `http://`. TLS ends at Cloudflare, and an `https://` domain makes Coolify's proxy request a certificate and redirect to HTTPS, which loops behind the tunnel.
-5. **Environment variables.** These are runtime variables; leave "Build Variable" unticked so the keys aren't baked into the image.
+5. **Environment variables.** These are runtime variables. Untick "Available at Buildtime" on each one: the build never needs the keys, and build variables are passed to every build step and kept in the server's build cache.
 
    | Variable | Value |
    |---|---|
@@ -54,6 +54,12 @@ Cloudflare handles TLS. Everything after the tunnel is plain HTTP on the homelab
 
    Don't point the tunnel straight at the container. Its address changes on every redeploy.
 
+3. **Or route a wildcard once** so every app on that server goes live without a tunnel change:
+   - Tunnel public hostname `*.example.com` → `http://localhost:80`, placed after any named hostnames
+   - DNS: a proxied `CNAME` for `*` pointing at `<tunnel-id>.cfargotunnel.com`
+
+   Named DNS records still win over the wildcard, so existing hostnames keep their routes. Cloudflare's free certificate covers one level (`*.example.com`, not `*.s2.example.com`), so only one server per domain can own the wildcard.
+
 ## 3. Make the tunnel the only way in
 
 The app trusts `CF-Connecting-IP` for rate limiting. Anyone who reaches Coolify's proxy directly could forge that header and get around the limit.
@@ -80,3 +86,9 @@ If the stream arrives all at once, something between Cloudflare and the app is b
 ## 5. Update
 
 Push to `main`. With the GitHub App source, Coolify can redeploy on push (enable Auto Deploy); otherwise click **Redeploy**. Runs in flight during a redeploy are cut off.
+
+## Troubleshooting
+
+**Every hostname gets a plain `404 page not found`.** That is Traefik with no routes. Since Docker Engine 29, older Traefik releases can't read containers, and the proxy log repeats `client version 1.24 is too old`. In Coolify, open the server's **Proxy → Configuration**, change the image to `traefik:v3.6` or newer, remove any `DOCKER_API_VERSION` pin, save and restart the proxy.
+
+**The proxy log shows `Unable to obtain ACME certificate`.** Some app on that server has an `https://` domain. Behind the tunnel, change it to `http://`; Cloudflare already serves HTTPS.
